@@ -1,7 +1,8 @@
 const mongoose = require("mongoose");
 const Model = require("./model");
+const ModelMajor = require("../major/model");
 const getFilteredMongoDB = require("../../../../../util/mongo_db/mongoDB_Queries");
-const baseRoute = "subject-time-managment/subject";
+const baseRoute = "subject-and-major/subject";
 const { logActivity } = require("../../../../../util/log");
 const { checkValidtion } = require("../../../../../util/helper");
 
@@ -19,14 +20,14 @@ const route = (prop) => {
     async (req, res) => {
       try {
         // Validation
-        const requiredFields = [{ key: "name", label: "ឈ្មោះមុខវិជ្ជា" }];
+        const requiredFields = [{ key: "name", label: "ឈ្មោះមុខវិជ្ជា" }, { key: "major_id", label: "លេខកូដជំនាញ" }];
         checkValidtion(res, req, requiredFields);
 
         // Get userLogin
         const { user_id: userId, user_data: user_data } = req.session;
 
         // Field
-        const { name, note, status } = req.body;
+        const { name, code, note,major_id,  status } = req.body;
 
         // Check if subject already exists
         const existingSubject = await Model.findOne({
@@ -41,9 +42,32 @@ const route = (prop) => {
           });
         }
 
+
+
+        if(!mongoose.isValidObjectId(major_id)){
+               return res.status(400).json({
+            success: false,
+            message: "ជំនាញមិនមានក្នុងប្រព័ន្ធ!",
+          });
+        }
+
+        // check major id
+        const majorData = await ModelMajor.find({
+            "_id" : major_id
+        })
+
+        if(!majorData){
+              return res.status(400).json({
+            success: false,
+            message: "ជំនាញមិនមានក្នុងប្រព័ន្ធ!",
+          });
+        }
+
         // Save
         const saveData = await Model.create({
           name: name.trim(),
+          code: code,
+          major_id: major_id,
           note: note || "",
           status: status !== undefined ? status : true,
           deleted: false,
@@ -121,7 +145,7 @@ const route = (prop) => {
           var data = await Model.findOne({
             _id: id,
             deleted: false,
-          });
+          }).populate("major_id")
 
           if (!data) {
             return res.status(404).json({
@@ -186,7 +210,7 @@ const route = (prop) => {
       try {
         const { id } = req.params;
         const { user_id: userId, user_data: user_data } = req.session;
-        const { name, note, status } = req.body;
+        const { name, code, major_id,note, status } = req.body;
 
         // Validate ID
         if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -242,6 +266,21 @@ const route = (prop) => {
           updateFields.status = status;
         }
 
+
+        
+        if (code !== undefined && code !== null) {
+          updateFields.code = code;
+        }
+
+
+
+        
+        
+        if (major_id !== undefined && major_id !== null) {
+          updateFields.major_id = major_id;
+        }
+      
+
         // ==========================================
         // Check if there's anything to update
         // ==========================================
@@ -293,6 +332,7 @@ const route = (prop) => {
       }
     },
   );
+
   // ==========================================
   // SOFT DELETE - Soft delete subject (move to trash)
   // ==========================================
@@ -536,7 +576,9 @@ const route = (prop) => {
     async (req, res) => {
       try {
         const { user_id: userId } = req.session;
-        const result = await getFilteredMongoDB(req.query, Model, [], [], null);
+        const result = await getFilteredMongoDB(req.query, Model, [
+            "major_id"
+        ], [], null);
 
         const newData = result.data.map((row) => {
           const data = row.toObject();

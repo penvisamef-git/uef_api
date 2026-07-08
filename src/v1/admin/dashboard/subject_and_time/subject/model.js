@@ -6,6 +6,17 @@ const userSchema = new mongoose.Schema(
       required: true,
     },
 
+     code: {
+      type: String,
+      required: false,
+    },
+
+    major_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Major",
+      required: true,
+    },
+
     // >>>>>> Defualt <<<<< //
     note: String,
     status: {
