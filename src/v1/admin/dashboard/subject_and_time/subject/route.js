@@ -20,14 +20,14 @@ const route = (prop) => {
     async (req, res) => {
       try {
         // Validation
-        const requiredFields = [{ key: "name", label: "ឈ្មោះមុខវិជ្ជា" }, { key: "major_id", label: "លេខកូដជំនាញ" }];
+        const requiredFields = [{ key: "name_in_eng", label: "name_in_eng" }, { key: "credit", label: "credit" } ,{ key: "name", label: "ឈ្មោះមុខវិជ្ជា" }, { key: "major_id", label: "លេខកូដជំនាញ" }];
         checkValidtion(res, req, requiredFields);
 
         // Get userLogin
         const { user_id: userId, user_data: user_data } = req.session;
 
         // Field
-        const { name, code, note,major_id,  status } = req.body;
+        const { name, code, note,major_id,  status, credit, name_in_eng } = req.body;
 
         // Check if subject already exists
         const existingSubject = await Model.findOne({
@@ -68,6 +68,8 @@ const route = (prop) => {
           name: name.trim(),
           code: code,
           major_id: major_id,
+          credit: credit,
+          name_in_eng : name_in_eng,
           note: note || "",
           status: status !== undefined ? status : true,
           deleted: false,
@@ -180,7 +182,7 @@ const route = (prop) => {
       try {
         const result = await Model.find({
           deleted: false,
-        });
+        }).populate("major_id")
 
         res.status(200).json({
           success: true,
@@ -210,7 +212,7 @@ const route = (prop) => {
       try {
         const { id } = req.params;
         const { user_id: userId, user_data: user_data } = req.session;
-        const { name, code, major_id,note, status } = req.body;
+        const { name, code, major_id,note, status, name_in_eng, credit } = req.body;
 
         // Validate ID
         if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -271,6 +273,17 @@ const route = (prop) => {
         if (code !== undefined && code !== null) {
           updateFields.code = code;
         }
+
+
+          if (credit !== undefined && credit !== null) {
+          updateFields.credit = credit;
+        }
+
+
+          if (name_in_eng !== undefined && name_in_eng !== null) {
+          updateFields.name_in_eng = name_in_eng;
+        }
+
 
 
 

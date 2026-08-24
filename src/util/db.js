@@ -1,6 +1,8 @@
 const mongoose = require("mongoose");
+const dns = require("dns");
 require("dotenv").config();
 
+dns.setServers(["1.1.1.1", "1.0.0.1"]);
 const uri = `mongodb+srv://${process.env.MONGO_USER}:${process.env.MONGO_PASS}@cluster0.4p0jcyk.mongodb.net/${process.env.MONGO_DB}?retryWrites=true&w=majority`;
 
 const connectDB = async () => {

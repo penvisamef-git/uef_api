@@ -82,6 +82,7 @@ const route = (prop) => {
           group_user_id,
           note,
           status,
+          can_login_in_app,
         } = req.body;
         const titleResponse = firstname + " " + lastname;
 
@@ -114,6 +115,7 @@ const route = (prop) => {
           unit_id: userData.unit_id,
           note,
           status,
+          can_login_in_app,
           deleted: false, //  Hidden
           created_by: userId, //  Hidden
           updated_by: userId, //  Hidden
@@ -149,7 +151,7 @@ const route = (prop) => {
           error: err,
         });
       }
-    }
+    },
   );
 
   prop.app.get(
@@ -205,7 +207,7 @@ const route = (prop) => {
           error: err,
         });
       }
-    }
+    },
   );
 
   prop.app.get(
@@ -221,7 +223,7 @@ const route = (prop) => {
           UserModel,
           ["group_user_id"],
           [{ is_super_admin: false }],
-          unit_id
+          unit_id,
         );
 
         const newData = result.data.map((row) => {
@@ -238,7 +240,7 @@ const route = (prop) => {
       } catch (err) {
         res.status(500).json({ success: false, message: err.message });
       }
-    }
+    },
   );
 
   prop.app.get(
@@ -271,7 +273,7 @@ const route = (prop) => {
           error: err.message || err,
         });
       }
-    }
+    },
   );
 
   prop.app.delete(
@@ -305,7 +307,7 @@ const route = (prop) => {
         // ───────────────────────────────────────────────
         // ✅ Remove empty fields (null or undefined)
         Object.keys(updateFields).forEach(
-          (key) => updateFields[key] == null && delete updateFields[key]
+          (key) => updateFields[key] == null && delete updateFields[key],
         );
 
         // ───────────────────────────────────────────────
@@ -325,7 +327,7 @@ const route = (prop) => {
           updateFields,
           {
             new: true,
-          }
+          },
         );
 
         if (!updatedUnit) {
@@ -358,7 +360,7 @@ const route = (prop) => {
             updatedUnit.firstname + " " + updatedUnit.lastname
           } បានលុប`,
           message: deletedText(
-            `${updatedUnit.firstname + " " + updatedUnit.lastname}`
+            `${updatedUnit.firstname + " " + updatedUnit.lastname}`,
           ),
         });
       } catch (err) {
@@ -368,7 +370,7 @@ const route = (prop) => {
           error: err,
         });
       }
-    }
+    },
   );
 
   prop.app.put(
@@ -402,7 +404,7 @@ const route = (prop) => {
         // ───────────────────────────────────────────────
         // ✅ Remove empty fields (null or undefined)
         Object.keys(updateFields).forEach(
-          (key) => updateFields[key] == null && delete updateFields[key]
+          (key) => updateFields[key] == null && delete updateFields[key],
         );
 
         // ───────────────────────────────────────────────
@@ -422,7 +424,7 @@ const route = (prop) => {
           updateFields,
           {
             new: true,
-          }
+          },
         );
 
         if (!updatedUnit) {
@@ -442,7 +444,7 @@ const route = (prop) => {
             updatedUnit.firstname + " " + updatedUnit.lastname
           } ត្រូវបានកែប្រែ!`,
           description: `គណនី: ${userEmail} បានកែប្រែព័ត៌មានដូចជា : ${JSON.stringify(
-            updateFields
+            updateFields,
           )}`,
           categoryTitle: logTitle,
           createdBy: userId,
@@ -455,7 +457,7 @@ const route = (prop) => {
           success: true,
           data: updatedUnit,
           message: updatedText(
-            updatedUnit.firstname + " " + updatedUnit.lastname
+            updatedUnit.firstname + " " + updatedUnit.lastname,
           ),
         });
       } catch (err) {
@@ -465,7 +467,7 @@ const route = (prop) => {
           error: err,
         });
       }
-    }
+    },
   );
 
   // Update password for admin
@@ -507,7 +509,7 @@ const route = (prop) => {
         // ───────────────────────────────────────────────
         // ✅ Remove empty fields (null or undefined)
         Object.keys(updateFields).forEach(
-          (key) => updateFields[key] == null && delete updateFields[key]
+          (key) => updateFields[key] == null && delete updateFields[key],
         );
 
         // ───────────────────────────────────────────────
@@ -527,7 +529,7 @@ const route = (prop) => {
           updateFields,
           {
             new: true,
-          }
+          },
         );
 
         if (!updatedData) {
@@ -562,7 +564,7 @@ const route = (prop) => {
           success: true,
           data: updatedData,
           message: updatedText(
-            updatedData.firstname + " " + updatedData.lastname
+            updatedData.firstname + " " + updatedData.lastname,
           ),
         });
       } catch (err) {
@@ -572,7 +574,7 @@ const route = (prop) => {
           error: err,
         });
       }
-    }
+    },
   );
 
   // This for only new client login need to add new password after reset password from add
@@ -610,7 +612,7 @@ const route = (prop) => {
         // ───────────────────────────────────────────────
         // ✅ Remove empty fields (null or undefined)
         Object.keys(updateFields).forEach(
-          (key) => updateFields[key] == null && delete updateFields[key]
+          (key) => updateFields[key] == null && delete updateFields[key],
         );
 
         // ───────────────────────────────────────────────
@@ -630,7 +632,7 @@ const route = (prop) => {
           updateFields,
           {
             new: true,
-          }
+          },
         );
 
         if (!updatedData) {
@@ -646,7 +648,7 @@ const route = (prop) => {
           success: true,
           data: updatedData,
           message: updatedText(
-            updatedData.firstname + " " + updatedData.lastname
+            updatedData.firstname + " " + updatedData.lastname,
           ),
         });
       } catch (err) {
@@ -656,7 +658,65 @@ const route = (prop) => {
           error: err,
         });
       }
-    }
+    },
+  );
+
+  // ===================================== App ================================================
+  prop.app.get(
+    `${urlAPI}-app/profile`,
+    prop.api_auth,
+    prop.jwt_auth,
+    prop.request_user,
+    async (req, res) => {
+      try {
+        const { user_id: userId } = req.session;
+        const id = userId;
+
+        if (id) {
+          // ✅ Validate ID
+          if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({
+              success: false,
+              message: "No ID Found",
+            });
+          }
+
+          var userData = await UserModel.findOne({
+            _id: id,
+            deleted: false,
+          });
+
+          if (!userData) {
+            return res.status(404).json({
+              success: false,
+              message: notFoundData,
+            });
+          }
+
+          const user = userData.toObject();
+          delete user.password;
+
+          // if not not super admin
+          if (!user.is_super_admin) {
+            // loading role
+            const role = await modelGroupUser.findOne({
+              _id: user.group_user_id,
+            });
+            if (role) {
+              user.role = role;
+            }
+          }
+
+          return res.status(200).json({ success: true, data: user });
+        }
+      } catch (err) {
+        res.status(500).json({
+          success: false,
+          message: "Internal Error",
+          error: err,
+        });
+      }
+    },
   );
 };
 

@@ -22,20 +22,19 @@ const route = (prop) => {
         const requiredFields = [
           { key: "firstname", label: "គោត្តនាម" },
           { key: "lastname", label: "នាម" },
-          { key: "fullname_english", label: "ឈ្មោះពេញភាសាឡាតាំង" },
+          { key: "firstname_english", label: "គោត្តនាម (ឡាតាំង)" },
+          { key: "lastname_english", label: "នាម (ឡាតាំង)" },
           { key: "dob", label: "ថ្ងៃខែឆ្នាំកំណើត" },
-          { key: "national", label: "ជនជាតិ" },
-          { key: "nationality", label: "សញ្ជាតិ" },
+          { key: "national_id", label: "ជនជាតិ" },
+          { key: "nationality_id", label: "សញ្ជាតិ" },
           { key: "gender", label: "ភេទ" },
-          { key: "id_card_number", label: "លេខអត្តសញ្ញាណប័ណ្ណ" },
-          { key: "place_of_birth", label: "ទីកន្លែងកំណើត" },
-          { key: "present_address", label: "ទីលំនៅបច្ចុប្បន្ន" },
           { key: "personal_contact", label: "លេខទូរស័ព្ទផ្ទាល់ខ្លួន" },
+          { key: "degree_level_id", label: "កម្រិតសិក្សា" },
+          { key: "shift_id", label: "វេណសិក្សា" },
+          { key: "major_id", label: "មុខជំនាញ" },
           { key: "high_school_name", label: "ឈ្មោះវិទ្យាល័យ" },
           { key: "come_from_province_or_city", label: "មកពីរខេត្ត" },
           { key: "level_lastest_certificat", label: "កម្រិតសញ្ញាបត្រចុងក្រោយ" },
-          { key: "lastest_skill", label: "ជំនាញ" },
-          { key: "major", label: "មុខជំនាញ" },
         ];
         checkValidtion(res, req, requiredFields);
 
@@ -46,22 +45,31 @@ const route = (prop) => {
         const {
           firstname,
           lastname,
-          fullname_english,
+          firstname_english,
+          lastname_english,
+          uef_code_id_card_number,
           dob,
-          national,
-          nationality,
+          national_id,
+          nationality_id,
           gender,
           marital_status,
           id_card_number,
           passport_number,
-          place_of_birth,
-          present_address,
+          born_house_number,
+          born_street_number,
+          born_village_id,
+          born_zip_code,
+          address_house_number,
+          address_street_number,
+          address_village_id,
+          address_zip_code,
           email,
           personal_contact,
           family_contact,
-          degree_level,
-          study_shift,
-          major,
+          experience,
+          degree_level_id,
+          shift_id,
+          major_id,
           know_uef,
           know_uef_other,
           high_school_name,
@@ -76,80 +84,187 @@ const route = (prop) => {
           working_position,
           working_company,
           working_place,
+          // Father
           family_father_name,
           family_father_name_en,
           family_father_age,
-          family_father_national,
-          family_father_nationality,
           family_father_job,
           family_father_company,
           family_father_contact,
-          family_father_present_address,
+          family_father_address_house_number,
+          family_father_address_street_number,
+          family_father_address_village_id,
+          family_father_address_zip_code,
+          family_father_national_id,
+          family_father_nationality_id,
+          // Mother
           family_mother_name,
           family_mother_name_en,
           family_mother_age,
-          family_mother_national,
-          family_mother_nationality,
           family_mother_job,
           family_mother_company,
           family_mother_contact,
-          family_mother_present_address,
+          family_mother_address_house_number,
+          family_mother_address_street_number,
+          family_mother_address_village_id,
+          family_mother_address_zip_code,
+          family_mother_national_id,
+          family_mother_nationality_id,
           note,
           status,
         } = req.body;
 
+        // Validate ObjectIds
+        if (!mongoose.Types.ObjectId.isValid(national_id)) {
+          return res.status(400).json({
+            success: false,
+            message: "ជនជាតិមិនត្រឹមត្រូវ!",
+          });
+        }
+
+        if (!mongoose.Types.ObjectId.isValid(nationality_id)) {
+          return res.status(400).json({
+            success: false,
+            message: "សញ្ជាតិមិនត្រឹមត្រូវ!",
+          });
+        }
+
+        if (!mongoose.Types.ObjectId.isValid(degree_level_id)) {
+          return res.status(400).json({
+            success: false,
+            message: "កម្រិតសិក្សាមិនត្រឹមត្រូវ!",
+          });
+        }
+
+        if (!mongoose.Types.ObjectId.isValid(shift_id)) {
+          return res.status(400).json({
+            success: false,
+            message: "វេណសិក្សាមិនត្រឹមត្រូវ!",
+          });
+        }
+
+        if (!mongoose.Types.ObjectId.isValid(major_id)) {
+          return res.status(400).json({
+            success: false,
+            message: "មុខជំនាញមិនត្រឹមត្រូវ!",
+          });
+        }
+
+        // Validate Father ObjectIds if provided
+        if (family_father_national_id && !mongoose.Types.ObjectId.isValid(family_father_national_id)) {
+          return res.status(400).json({
+            success: false,
+            message: "ជនជាតិឪពុកមិនត្រឹមត្រូវ!",
+          });
+        }
+
+        if (family_father_nationality_id && !mongoose.Types.ObjectId.isValid(family_father_nationality_id)) {
+          return res.status(400).json({
+            success: false,
+            message: "សញ្ជាតិឪពុកមិនត្រឹមត្រូវ!",
+          });
+        }
+
+        // Validate Mother ObjectIds if provided
+        if (family_mother_national_id && !mongoose.Types.ObjectId.isValid(family_mother_national_id)) {
+          return res.status(400).json({
+            success: false,
+            message: "ជនជាតិម្តាយមិនត្រឹមត្រូវ!",
+          });
+        }
+
+        if (family_mother_nationality_id && !mongoose.Types.ObjectId.isValid(family_mother_nationality_id)) {
+          return res.status(400).json({
+            success: false,
+            message: "សញ្ជាតិម្តាយមិនត្រឹមត្រូវ!",
+          });
+        }
+
         // Save
         const saveData = await Model.create({
+          // Personal Information
           firstname: firstname.trim(),
           lastname: lastname.trim(),
-          fullname_english: fullname_english.trim(),
+          firstname_english: firstname_english.trim(),
+          lastname_english: lastname_english.trim(),
+          uef_code_id_card_number: uef_code_id_card_number || "",
           dob: dob,
-          national: national.trim(),
-          nationality: nationality.trim(),
+          national_id: national_id,
+          nationality_id: nationality_id,
           gender: gender,
           marital_status: marital_status || "single",
-          id_card_number: id_card_number.trim(),
+          id_card_number: id_card_number || "",
           passport_number: passport_number || "",
-          place_of_birth: place_of_birth.trim(),
-          present_address: present_address.trim(),
+          
+          // Born Address
+          born_house_number: born_house_number || "",
+          born_street_number: born_street_number || "",
+          born_village_id: born_village_id || "",
+          born_zip_code: born_zip_code || "",
+          
+          // Present Address
+          address_house_number: address_house_number || "",
+          address_street_number: address_street_number || "",
+          address_village_id: address_village_id || "",
+          address_zip_code: address_zip_code || "",
+          
           email: email || "",
           personal_contact: personal_contact.trim(),
           family_contact: family_contact || "",
-          degree_level: degree_level || "bachelor",
-          study_shift: study_shift || "morning",
-          major: major,
+          experience: experience || [],
+          
+          // University Information
+          degree_level_id: degree_level_id,
+          shift_id: shift_id,
+          major_id: major_id,
           know_uef: know_uef || "facebook",
           know_uef_other: know_uef_other || "",
+          
+          // Education
           high_school_name: high_school_name.trim(),
           come_from_province_or_city: come_from_province_or_city.trim(),
           level_lastest_certificat: level_lastest_certificat.trim(),
-          lastest_skill: lastest_skill.trim(),
+          lastest_skill: lastest_skill || "",
           date_pass_exam: date_pass_exam || "",
           certificat_number: certificat_number || "",
           score_total: score_total || "",
           score_level: score_level || "",
           english_level: english_level || "basic",
+          
+          // Work Experience
           working_position: working_position || "",
           working_company: working_company || "",
           working_place: working_place || "",
+          
+          // Father
           family_father_name: family_father_name || "",
           family_father_name_en: family_father_name_en || "",
           family_father_age: family_father_age || "",
-          family_father_national: family_father_national || "",
-          family_father_nationality: family_father_nationality || "",
           family_father_job: family_father_job || "",
           family_father_company: family_father_company || "",
           family_father_contact: family_father_contact || "",
-          family_father_present_address: family_father_present_address || "",
+          family_father_address_house_number: family_father_address_house_number || "",
+          family_father_address_street_number: family_father_address_street_number || "",
+          family_father_address_village_id: family_father_address_village_id || "",
+          family_father_address_zip_code: family_father_address_zip_code || "",
+          family_father_national_id: family_father_national_id || null,
+          family_father_nationality_id: family_father_nationality_id || null,
+          
+          // Mother
           family_mother_name: family_mother_name || "",
           family_mother_name_en: family_mother_name_en || "",
           family_mother_age: family_mother_age || "",
-          family_mother_national: family_mother_national || "",
-          family_mother_nationality: family_mother_nationality || "",
           family_mother_job: family_mother_job || "",
           family_mother_company: family_mother_company || "",
           family_mother_contact: family_mother_contact || "",
-          family_mother_present_address: family_mother_present_address || "",
+          family_mother_address_house_number: family_mother_address_house_number || "",
+          family_mother_address_street_number: family_mother_address_street_number || "",
+          family_mother_address_village_id: family_mother_address_village_id || "",
+          family_mother_address_zip_code: family_mother_address_zip_code || "",
+          family_mother_national_id: family_mother_national_id || null,
+          family_mother_nationality_id: family_mother_nationality_id || null,
+          
+          // Other
           note: note || "",
           status: status !== undefined ? status : true,
           deleted: false,
@@ -227,7 +342,16 @@ const route = (prop) => {
           var data = await Model.findOne({
             _id: id,
             deleted: false,
-          }).populate("major", "name");
+          })
+            .populate("national_id", "name name_kh name_en")
+            .populate("nationality_id", "name name_kh name_en")
+            .populate("degree_level_id", "name name_kh name_en")
+            .populate("shift_id", "name name_kh name_en")
+            .populate("major_id", "name name_kh name_en")
+            .populate("family_father_national_id", "name name_kh name_en")
+            .populate("family_father_nationality_id", "name name_kh name_en")
+            .populate("family_mother_national_id", "name name_kh name_en")
+            .populate("family_mother_nationality_id", "name name_kh name_en");
 
           if (!data) {
             return res.status(404).json({
@@ -262,7 +386,16 @@ const route = (prop) => {
       try {
         const result = await Model.find({
           deleted: false,
-        }).populate("major", "name");
+        })
+          .populate("national_id", "name name_kh name_en")
+          .populate("nationality_id", "name name_kh name_en")
+          .populate("degree_level_id", "name name_kh name_en")
+          .populate("shift_id", "name name_kh name_en")
+          .populate("major_id", "name name_kh name_en")
+          .populate("family_father_national_id", "name name_kh name_en")
+          .populate("family_father_nationality_id", "name name_kh name_en")
+          .populate("family_mother_national_id", "name name_kh name_en")
+          .populate("family_mother_nationality_id", "name name_kh name_en");
 
         res.status(200).json({
           success: true,
@@ -292,7 +425,7 @@ const route = (prop) => {
       try {
         const { id } = req.params;
         const { user_id: userId, user_data: user_data } = req.session;
-        const { id_card_number, ...updateData } = req.body;
+        const updateData = req.body;
 
         // Validate ID
         if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -312,6 +445,72 @@ const route = (prop) => {
           return res.status(404).json({
             success: false,
             message: "មិនមានទិន្នន័យក្នុងប្រព័ន្ធ!",
+          });
+        }
+
+        // Validate ObjectIds if they are being updated
+        if (updateData.national_id && !mongoose.Types.ObjectId.isValid(updateData.national_id)) {
+          return res.status(400).json({
+            success: false,
+            message: "ជនជាតិមិនត្រឹមត្រូវ!",
+          });
+        }
+
+        if (updateData.nationality_id && !mongoose.Types.ObjectId.isValid(updateData.nationality_id)) {
+          return res.status(400).json({
+            success: false,
+            message: "សញ្ជាតិមិនត្រឹមត្រូវ!",
+          });
+        }
+
+        if (updateData.degree_level_id && !mongoose.Types.ObjectId.isValid(updateData.degree_level_id)) {
+          return res.status(400).json({
+            success: false,
+            message: "កម្រិតសិក្សាមិនត្រឹមត្រូវ!",
+          });
+        }
+
+        if (updateData.shift_id && !mongoose.Types.ObjectId.isValid(updateData.shift_id)) {
+          return res.status(400).json({
+            success: false,
+            message: "វេណសិក្សាមិនត្រឹមត្រូវ!",
+          });
+        }
+
+        if (updateData.major_id && !mongoose.Types.ObjectId.isValid(updateData.major_id)) {
+          return res.status(400).json({
+            success: false,
+            message: "មុខជំនាញមិនត្រឹមត្រូវ!",
+          });
+        }
+
+        // Validate Father ObjectIds if provided
+        if (updateData.family_father_national_id && !mongoose.Types.ObjectId.isValid(updateData.family_father_national_id)) {
+          return res.status(400).json({
+            success: false,
+            message: "ជនជាតិឪពុកមិនត្រឹមត្រូវ!",
+          });
+        }
+
+        if (updateData.family_father_nationality_id && !mongoose.Types.ObjectId.isValid(updateData.family_father_nationality_id)) {
+          return res.status(400).json({
+            success: false,
+            message: "សញ្ជាតិឪពុកមិនត្រឹមត្រូវ!",
+          });
+        }
+
+        // Validate Mother ObjectIds if provided
+        if (updateData.family_mother_national_id && !mongoose.Types.ObjectId.isValid(updateData.family_mother_national_id)) {
+          return res.status(400).json({
+            success: false,
+            message: "ជនជាតិម្តាយមិនត្រឹមត្រូវ!",
+          });
+        }
+
+        if (updateData.family_mother_nationality_id && !mongoose.Types.ObjectId.isValid(updateData.family_mother_nationality_id)) {
+          return res.status(400).json({
+            success: false,
+            message: "សញ្ជាតិម្តាយមិនត្រឹមត្រូវ!",
           });
         }
 
@@ -337,7 +536,16 @@ const route = (prop) => {
         // Update
         const updatedData = await Model.findByIdAndUpdate(id, updateFields, {
           new: true,
-        });
+        })
+          .populate("national_id", "name name_kh name_en")
+          .populate("nationality_id", "name name_kh name_en")
+          .populate("degree_level_id", "name name_kh name_en")
+          .populate("shift_id", "name name_kh name_en")
+          .populate("major_id", "name name_kh name_en")
+          .populate("family_father_national_id", "name name_kh name_en")
+          .populate("family_father_nationality_id", "name name_kh name_en")
+          .populate("family_mother_national_id", "name name_kh name_en")
+          .populate("family_mother_nationality_id", "name name_kh name_en");
 
         // Log
         await logActivity({
@@ -575,7 +783,16 @@ const route = (prop) => {
       try {
         const result = await Model.find({
           deleted: true,
-        }).populate("major", "name");
+        })
+          .populate("national_id", "name name_kh name_en")
+          .populate("nationality_id", "name name_kh name_en")
+          .populate("degree_level_id", "name name_kh name_en")
+          .populate("shift_id", "name name_kh name_en")
+          .populate("major_id", "name name_kh name_en")
+          .populate("family_father_national_id", "name name_kh name_en")
+          .populate("family_father_nationality_id", "name name_kh name_en")
+          .populate("family_mother_national_id", "name name_kh name_en")
+          .populate("family_mother_nationality_id", "name name_kh name_en");
 
         res.status(200).json({
           success: true,
@@ -592,6 +809,7 @@ const route = (prop) => {
       }
     },
   );
+
   // ==========================================
   // GET - Pagination
   // ==========================================
@@ -633,7 +851,15 @@ const route = (prop) => {
 
         // Get data with population
         const data = await Model.find(filter)
-          .populate("major", "name")
+          .populate("national_id", "name name_kh name_en")
+          .populate("nationality_id", "name name_kh name_en")
+          .populate("degree_level_id", "name name_kh name_en")
+          .populate("shift_id", "name name_kh name_en")
+          .populate("major_id", "name name_kh name_en")
+          .populate("family_father_national_id", "name name_kh name_en")
+          .populate("family_father_nationality_id", "name name_kh name_en")
+          .populate("family_mother_national_id", "name name_kh name_en")
+          .populate("family_mother_nationality_id", "name name_kh name_en")
           .sort({ [sortField]: sortOrder })
           .skip(skip)
           .limit(limitNum);

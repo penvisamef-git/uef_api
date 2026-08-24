@@ -35,6 +35,13 @@ const userSchema = new mongoose.Schema(
       required: true,
     },
 
+
+    can_login_in_app: {
+      type: Boolean,
+      default: false,
+    },
+
+
     // >>>>>> Defualt <<<<< //
     note: String,
     status: {

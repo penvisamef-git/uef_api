@@ -6,6 +6,17 @@ const userSchema = new mongoose.Schema(
       required: true,
     },
 
+    name_in_english: {
+      type: String,
+      required: false,
+    },
+
+     department_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Department",
+      required: true,
+    },
+
     // >>>>>> Defualt <<<<< //
     note: String,
     status: {

@@ -4,6 +4,7 @@ const GroupUserModel = require("./group_user.model");
 const getFilteredMongoDB = require("../../../../util/mongo_db/mongoDB_Queries");
 const baseRoute = "group-user-permission";
 const { logActivity } = require("../../../../util/log");
+
 const route = (prop) => {
   // **************** Declaration ****************
   const urlAPI = `/${prop.main_route}/${baseRoute}`;
@@ -16,7 +17,7 @@ const route = (prop) => {
     return `${document} ${name} ត្រូវបានកែប្រែ និងរក្សារទុក!`;
   }
   function deletedText(name) {
-    return `${document}  ${name} ត្រូវបានលុបចេញពីប្រព័ន្ធ!`;
+    return `${document} ${name} ត្រូវបានលុបចេញពីប្រព័ន្ធ!`;
   }
   const serverError = "ម៉ាសុីនមេមានបញ្ហា សូមព្យាយាមម្តងទៀតពេលក្រោយ!";
   const existsText = `សិទ្ធអ្នកប្រើប្រាស់ មាននៅក្នុងប្រព័ន្ធរួចហើយ!`;
@@ -36,14 +37,17 @@ const route = (prop) => {
         value === null || // null value
         value === "" // empty string
       ) {
-        return res.json({
+        res.json({
           success: false,
           message: `សូមបញ្ចូល ${field.label}`,
         });
+        return false; // Return false to indicate validation failed
       }
     }
+    return true; // Return true if all validations pass
   }
 
+  // ===================== CREATE =====================
   prop.app.post(
     `${urlAPI}`,
     prop.api_auth,
@@ -53,26 +57,26 @@ const route = (prop) => {
       try {
         // ───────────────────────────────────────────────
         // ✅ Validate required fields
-
         const requiredFields = [
           { key: "name", label: "ឈ្មោះ" },
-          {
-            key: "permission",
-            label: "សិទ្ធអ្នកប្រើប្រាស់",
-          },
+          { key: "permission", label: "សិទ្ធអ្នកប្រើប្រាស់" },
         ];
-        checkValidtion(res, req, requiredFields);
+        
+        const isValid = checkValidtion(res, req, requiredFields);
+        if (!isValid) return; // Stop execution if validation fails
 
         // ───────────────────────────────────────────────
         // ✅ Get creator ID from session
         const { user_id: userId } = req.session;
         const { name, permission, note, status } = req.body;
-        const titleResponse = name;
 
         // ───────────────────────────────────────────────
-
-        // ✅ Create new unit
-        const exists = await GroupUserModel.exists({ name });
+        // ✅ Check if name already exists
+        const exists = await GroupUserModel.findOne({ 
+          name: name.trim(),
+          deleted: false 
+        });
+        
         if (exists) {
           return res.json({
             success: false,
@@ -80,23 +84,25 @@ const route = (prop) => {
           });
         }
 
+        // ───────────────────────────────────────────────
+        // ✅ Create new group permission
         const saveData = await GroupUserModel.create({
-          name,
-          permission,
-          note,
-          status,
-          deleted: false, //  Hidden
-          created_by: userId, //  Hidden
-          updated_by: userId, //  Hidden
+          name: name.trim(),
+          permission: permission || {},
+          note: note || "",
+          status: status !== undefined ? status : true,
+          deleted: false,
+          created_by: userId,
+          updated_by: userId,
         });
 
         // ───────────────────────────────────────────────
         // ✅ Log activity
         const userData = await UserModel.findOne({ _id: userId });
-        const userEmail = userData.email;
+        const userEmail = userData ? userData.email : "Unknown";
 
         await logActivity({
-          title: `${document}ថ្មី ${titleResponse} ត្រូវបានបង្កើត!`,
+          title: `${document}ថ្មី ${name} ត្រូវបានបង្កើត!`,
           description: `បង្កើតដោយគណនី: ${userEmail}`,
           categoryTitle: logTitle,
           createdBy: userId,
@@ -111,15 +117,17 @@ const route = (prop) => {
           message: newSave,
         });
       } catch (err) {
+        console.error("Error creating group permission:", err);
         res.status(500).json({
           success: false,
           message: serverError,
-          error: err,
+          error: err.message,
         });
       }
     }
   );
 
+  // ===================== GET BY ID =====================
   prop.app.get(
     `${urlAPI}/:id`,
     prop.api_auth,
@@ -129,39 +137,46 @@ const route = (prop) => {
       try {
         const { id } = req.params;
 
-        if (id) {
-          // ✅ Validate ID
-          if (!mongoose.Types.ObjectId.isValid(id)) {
-            return res.status(400).json({
-              success: false,
-              message: "No ID Found",
-            });
-          }
-
-          const unit = await GroupUserModel.findOne({
-            _id: id,
-            deleted: false,
+        if (!id) {
+          return res.status(400).json({
+            success: false,
+            message: noIDFound,
           });
-
-          if (!unit) {
-            return res.status(404).json({
-              success: false,
-              message: notFoundData,
-            });
-          }
-
-          return res.status(200).json({ success: true, data: unit });
         }
+
+        // ✅ Validate ID
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+          return res.status(400).json({
+            success: false,
+            message: "ID មិនត្រឹមត្រូវ!",
+          });
+        }
+
+        const unit = await GroupUserModel.findOne({
+          _id: id,
+          deleted: false,
+        });
+
+        if (!unit) {
+          return res.status(404).json({
+            success: false,
+            message: notFoundData,
+          });
+        }
+
+        return res.status(200).json({ success: true, data: unit });
       } catch (err) {
+        console.error("Error getting group permission:", err);
         res.status(500).json({
           success: false,
           message: "Internal Error",
-          error: err,
+          error: err.message,
         });
       }
     }
   );
 
+  // ===================== GET ALL =====================
   prop.app.get(
     `${urlAPI}`,
     prop.api_auth,
@@ -178,11 +193,13 @@ const route = (prop) => {
 
         res.json({ success: true, ...result });
       } catch (err) {
+        console.error("Error getting all group permissions:", err);
         res.status(500).json({ success: false, message: err.message });
       }
     }
   );
 
+  // ===================== GET ALL (without filter) =====================
   prop.app.get(
     `${urlAPI}-all`,
     prop.api_auth,
@@ -190,13 +207,13 @@ const route = (prop) => {
     prop.request_user,
     async (req, res) => {
       try {
-        const data = await GroupUserModel.find(); // Fetch all categories
-
+        const data = await GroupUserModel.find({ deleted: false });
         res.status(200).json({
           success: true,
           data: data,
         });
       } catch (err) {
+        console.error("Error getting all group permissions:", err);
         res.status(500).json({
           success: false,
           message: "Server error",
@@ -206,6 +223,7 @@ const route = (prop) => {
     }
   );
 
+  // ===================== DELETE =====================
   prop.app.delete(
     `${urlAPI}/:id`,
     prop.api_auth,
@@ -213,13 +231,9 @@ const route = (prop) => {
     prop.request_user,
     async (req, res) => {
       try {
-        // ───────────────────────────────────────────────
-        // ✅  ID
         const { id } = req.params;
         const { user_id: userId } = req.session;
 
-        // ───────────────────────────────────────────────
-        // ✅ Validate ID
         if (!mongoose.Types.ObjectId.isValid(id)) {
           return res.status(400).json({
             success: false,
@@ -227,76 +241,61 @@ const route = (prop) => {
           });
         }
 
-        // ───────────────────────────────────────────────
-        // ✅ Dynamically build update fields
-        const updateFields = {
-          deleted: true,
-          updated_by: userId,
-        };
+        // Check if exists
+        const existing = await GroupUserModel.findOne({
+          _id: id,
+          deleted: false,
+        });
 
-        // ───────────────────────────────────────────────
-        // ✅ Remove empty fields (null or undefined)
-        Object.keys(updateFields).forEach(
-          (key) => updateFields[key] == null && delete updateFields[key]
-        );
-
-        // ───────────────────────────────────────────────
-        // ✅ Ensure there's at least one field to update
-        if (Object.keys(updateFields).length === 1) {
-          // Only `updated_by` exists
-          return res.status(400).json({
-            success: false,
-            message: noDataUpdate,
-          });
-        }
-
-        // ───────────────────────────────────────────────
-        // ✅ Update unit
-        const updatedUnit = await GroupUserModel.findByIdAndUpdate(
-          id,
-          updateFields,
-          {
-            new: true,
-          }
-        );
-
-        if (!updatedUnit) {
+        if (!existing) {
           return res.status(404).json({
             success: false,
             message: noDataFound,
           });
         }
 
+        // Soft delete
+        const updatedUnit = await GroupUserModel.findByIdAndUpdate(
+          id,
+          {
+            deleted: true,
+            updated_by: userId,
+          },
+          {
+            new: true,
+          }
+        );
+
         // ───────────────────────────────────────────────
         // ✅ Log activity
         const userData = await UserModel.findOne({ _id: userId });
-        const userEmail = userData.email;
-        delete updateFields.updated_by;
+        const userEmail = userData ? userData.email : "Unknown";
+
         await logActivity({
-          title: `${document} ${updatedUnit.name} ត្រូវបានលុប!`,
+          title: `${document} ${existing.name} ត្រូវបានលុប!`,
           description: `គណនី: ${userEmail} បានលុបទិន្នន័យចេញពីប្រព័ន្ធ។`,
           categoryTitle: logTitle,
           createdBy: userId,
           req,
         });
 
-        // ───────────────────────────────────────────────
-        // ✅ Response
         res.status(200).json({
           success: true,
-          data: `${document} ${updatedUnit.name} បានលុប`,
-          message: deletedText(`${updatedUnit.name}`),
+          data: updatedUnit,
+          message: deletedText(existing.name),
         });
       } catch (err) {
+        console.error("Error deleting group permission:", err);
         res.status(500).json({
           success: false,
           message: serverError,
-          error: err,
+          error: err.message,
         });
       }
     }
   );
 
+  // ===================== UPDATE =====================
   prop.app.put(
     `${urlAPI}/:id`,
     prop.api_auth,
@@ -304,13 +303,9 @@ const route = (prop) => {
     prop.request_user,
     async (req, res) => {
       try {
-        // ───────────────────────────────────────────────
-        // ✅  ID
         const { id } = req.params;
         const { user_id: userId } = req.session;
 
-        // ───────────────────────────────────────────────
-        // ✅ Validate ID
         if (!mongoose.Types.ObjectId.isValid(id)) {
           return res.status(400).json({
             success: false,
@@ -318,73 +313,90 @@ const route = (prop) => {
           });
         }
 
-        // ───────────────────────────────────────────────
-        // ✅ Dynamically build update fields
-        const updateFields = {
-          ...req.body,
-          updated_by: userId,
-        };
+        // Check if exists
+        const existing = await GroupUserModel.findOne({
+          _id: id,
+          deleted: false,
+        });
 
-        // ───────────────────────────────────────────────
-        // ✅ Remove empty fields (null or undefined)
-        Object.keys(updateFields).forEach(
-          (key) => updateFields[key] == null && delete updateFields[key]
-        );
-
-        // ───────────────────────────────────────────────
-        // ✅ Ensure there's at least one field to update
-        if (Object.keys(updateFields).length === 1) {
-          // Only `updated_by` exists
-          return res.status(400).json({
-            success: false,
-            message: noDataUpdate,
-          });
-        }
-
-        // ───────────────────────────────────────────────
-        // ✅ Update unit
-        const updatedUnit = await GroupUserModel.findByIdAndUpdate(
-          id,
-          updateFields,
-          {
-            new: true,
-          }
-        );
-
-        if (!updatedUnit) {
+        if (!existing) {
           return res.status(404).json({
             success: false,
             message: noDataFound,
           });
         }
 
-        // ───────────────────────────────────────────────
-        // ✅ Log activity
+        // Check if name already exists (if name is being changed)
+        if (req.body.name && req.body.name !== existing.name) {
+          const nameExists = await GroupUserModel.findOne({
+            name: req.body.name.trim(),
+            deleted: false,
+            _id: { $ne: id },
+          });
+
+          if (nameExists) {
+            return res.status(400).json({
+              success: false,
+              message: existsText,
+            });
+          }
+        }
+
+        // Build update fields
+        const updateFields = {
+          ...req.body,
+          updated_by: userId,
+        };
+
+        // Remove undefined or null fields
+        Object.keys(updateFields).forEach(
+          (key) => (updateFields[key] == null || updateFields[key] === '') && delete updateFields[key]
+        );
+
+        // Ensure there's at least one field to update
+        if (Object.keys(updateFields).length === 1 && updateFields.updated_by) {
+          return res.status(400).json({
+            success: false,
+            message: noDataUpdate,
+          });
+        }
+
+        // Update
+        const updatedUnit = await GroupUserModel.findByIdAndUpdate(
+          id,
+          updateFields,
+          {
+            new: true,
+            runValidators: true,
+          }
+        );
+
+        // Log activity
         const userData = await UserModel.findOne({ _id: userId });
-        const userEmail = userData.email;
-        delete updateFields.updated_by;
+        const userEmail = userData ? userData.email : "Unknown";
+        
+        const logFields = { ...updateFields };
+        delete logFields.updated_by;
+
         await logActivity({
           title: `${document} ${updatedUnit.name} ត្រូវបានកែប្រែ!`,
-          description: `គណនី: ${userEmail} បានកែប្រែព័ត៌មានដូចជា : ${JSON.stringify(
-            updateFields
-          )}`,
+          description: `គណនី: ${userEmail} បានកែប្រែព័ត៌មានដូចជា : ${JSON.stringify(logFields)}`,
           categoryTitle: logTitle,
           createdBy: userId,
           req,
         });
 
-        // ───────────────────────────────────────────────
-        // ✅ Response
         res.status(200).json({
           success: true,
           data: updatedUnit,
           message: updatedText(updatedUnit.name),
         });
       } catch (err) {
+        console.error("Error updating group permission:", err);
         res.status(500).json({
           success: false,
           message: serverError,
-          error: err,
+          error: err.message,
         });
       }
     }

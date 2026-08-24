@@ -11,6 +11,25 @@ const userSchema = new mongoose.Schema(
       required: false,
     },
 
+
+            credit: {
+      type: Number,
+      required: false,
+    },
+
+        name_in_eng: {
+      type: String,
+      required: false,
+    },
+
+
+
+        code: {
+      type: String,
+      required: false,
+    },
+
+
     major_id: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Major",

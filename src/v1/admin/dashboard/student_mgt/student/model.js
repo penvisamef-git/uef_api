@@ -1,5 +1,44 @@
 const mongoose = require("mongoose");
 
+// Experience Work Sub-schema
+const experienceSchema = new mongoose.Schema(
+  {
+    year_start: {
+      type: String,
+      required: false,
+    },
+    year_end: {
+      type: String,
+      required: false,
+    },
+    organization: {
+      type: String,
+      required: false,
+      trim: true,
+    },
+    role: {
+      type: String,
+      required: false,
+      trim: true,
+    },
+    job_responsibility: {
+      type: String,
+      required: false,
+      trim: true,
+    },
+    status: {
+      type: String,
+      enum: ["low", "medium", "good", "excellent"],
+      required: false,
+    },
+    file: {
+      type: String,
+      required: false,
+    },
+  },
+  { _id: true },
+);
+
 const studentSchema = new mongoose.Schema(
   {
     // ==========================================
@@ -15,25 +54,38 @@ const studentSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
-    fullname_english: {
+    firstname_english: {
       type: String,
       required: true,
       trim: true,
+    },
+
+    lastname_english: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+
+    uef_code_id_card_number: {
+      type: String,
+      required: false,
     },
     dob: {
       type: Date,
       required: true,
     },
-    national: {
-      type: String,
+
+    national_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "MasterDataNational",
       required: true,
-      trim: true,
     },
-    nationality: {
-      type: String,
+    nationality_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "MasterDataNationality",
       required: true,
-      trim: true,
     },
+
     gender: {
       type: String,
       enum: ["male", "female", "other"],
@@ -48,23 +100,70 @@ const studentSchema = new mongoose.Schema(
       type: String,
       required: false,
       trim: true,
-    
     },
     passport_number: {
       type: String,
       trim: true,
       default: "",
     },
-    place_of_birth: {
+
+
+    // ==========================================
+    // Born Address
+    // ==========================================
+    born_house_number: {
       type: String,
-      required: true,
+      required: false,
       trim: true,
     },
-    present_address: {
+    born_street_number: {
       type: String,
-      required: true,
+      required: false,
       trim: true,
     },
+    born_village_id: {
+      type: String,
+      required: false,
+      trim: true,
+    },
+
+    born_zip_code: {
+      type: String,
+      required: false,
+     
+    },
+
+    
+
+    // ==========================================
+    // Present Address
+    // ==========================================
+    address_house_number: {
+      type: String,
+      required: false,
+      trim: true,
+    },
+    address_street_number: {
+      type: String,
+      required: false,
+      trim: true,
+    },
+    address_village_id: {
+      type: String,
+      required: false,
+      trim: true,
+    },
+
+        address_zip_code: {
+      type: String,
+      required: false,
+     
+    },
+
+
+
+
+
     email: {
       type: String,
       trim: true,
@@ -82,26 +181,32 @@ const studentSchema = new mongoose.Schema(
       default: "",
     },
 
+    experience: {
+      type: [experienceSchema],
+      default: [],
+    },
+
     // ==========================================
     // University Information (Tab 2)
     // ==========================================
-    degree_level: {
-      type: String,
-      enum: ["certificate", "associate", "bachelor", "master", "phd"],
-      required: true,
-      default: "bachelor",
-    },
-    study_shift: {
-      type: String,
-      enum: ["morning", "afternoon", "evening", "weekend"],
-      required: true,
-      default: "morning",
-    },
-    major: {
+    degree_level_id: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Subject",
+      ref: "MasterDataDegreeLevel",
       required: true,
     },
+
+    shift_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "MasterDataShift",
+      required: true,
+    },
+
+    major_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Major",
+      required: true,
+    },
+
     know_uef: {
       type: String,
       enum: [
@@ -206,16 +311,7 @@ const studentSchema = new mongoose.Schema(
       trim: true,
       default: "",
     },
-    family_father_national: {
-      type: String,
-      trim: true,
-      default: "",
-    },
-    family_father_nationality: {
-      type: String,
-      trim: true,
-      default: "",
-    },
+
     family_father_job: {
       type: String,
       trim: true,
@@ -231,11 +327,60 @@ const studentSchema = new mongoose.Schema(
       trim: true,
       default: "",
     },
-    family_father_present_address: {
+
+
+
+    family_father_address_house_number: {
       type: String,
+      required: false,
       trim: true,
-      default: "",
     },
+     family_father_address_street_number: {
+      type: String,
+      required: false,
+      trim: true,
+    },
+     family_father_address_village_id: {
+      type: String,
+      required: false,
+      trim: true,
+    },
+
+         family_father_address_zip_code: {
+      type: String,
+      required: false,
+     
+    },
+
+       family_father_national_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "MasterDataNational",
+      required: false,
+    },
+    family_father_nationality_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "MasterDataNationality",
+      required: false,
+    },
+
+
+
+
+
+
+
+
+
+
+
+   
+
+
+
+
+
+
+
 
     // Mother
     family_mother_name: {
@@ -253,16 +398,7 @@ const studentSchema = new mongoose.Schema(
       trim: true,
       default: "",
     },
-    family_mother_national: {
-      type: String,
-      trim: true,
-      default: "",
-    },
-    family_mother_nationality: {
-      type: String,
-      trim: true,
-      default: "",
-    },
+ 
     family_mother_job: {
       type: String,
       trim: true,
@@ -278,11 +414,47 @@ const studentSchema = new mongoose.Schema(
       trim: true,
       default: "",
     },
-    family_mother_present_address: {
+
+     family_mother_address_house_number: {
       type: String,
+      required: false,
       trim: true,
-      default: "",
     },
+     family_mother_address_street_number: {
+      type: String,
+      required: false,
+      trim: true,
+    },
+     family_mother_address_village_id: {
+      type: String,
+      required: false,
+      trim: true,
+    },
+
+         family_mother_address_zip_code: {
+      type: String,
+      required: false,
+     
+    },
+
+
+
+    
+      family_mother_national_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "MasterDataNational",
+      required: false,
+    },
+    family_mother_nationality_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "MasterDataNationality",
+      required: false,
+    },
+
+
+
+
+   
 
     // ==========================================
     // Other (Tab 5)

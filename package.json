@@ -16,7 +16,8 @@
     "firebase-functions": "^6.3.1",
     "formidable-serverless": "^1.1.1",
     "helmet": "^8.1.0",
-    "mongoose": "^8.16.2",
+    "mongodb": "^7.5.0",
+    "mongoose": "^9.9.3",
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^6.10.1",
     "nodemon": "^3.1.9",
@@ -27,6 +28,7 @@
     "ua-parser-js": "^2.0.3",
     "uuid": "^11.1.0",
     "uuid-v4": "^0.1.0",
+    "vercel": "^55.0.0",
     "web-vitals": "^4.2.4"
   },
   "scripts": {

@@ -4,13 +4,11 @@ const getFilteredMongoDB = require("../../../../../util/mongo_db/mongoDB_Queries
 const baseRoute = "building-management/room";
 const { logActivity } = require("../../../../../util/log");
 const { checkValidtion } = require("../../../../../util/helper");
-const ModelFloor = require('../floor/model');
-const ModelBuilding = require("../building/model")
+const ModelFloor = require("../floor/model");
+const ModelBuilding = require("../building/model");
 
 const route = (prop) => {
   const urlAPI = `/${prop.main_route}/${baseRoute}`;
-
-
 
   // ==========================================
   // CREATE - Create new room
@@ -25,7 +23,7 @@ const route = (prop) => {
         // Validation
         const requiredFields = [
           { key: "name", label: "ឈ្មោះបន្ទប់" },
-          { key: "floor_id", label: "ជាន់" }
+          { key: "floor_id", label: "ជាន់" },
         ];
         checkValidtion(res, req, requiredFields);
 
@@ -120,64 +118,64 @@ const route = (prop) => {
     },
   );
 
-// ==========================================
-// GET BY ID - Get single room
-// ==========================================
-prop.app.get(
-  `${urlAPI}/:id`,
-  prop.api_auth,
-  prop.jwt_auth,
-  prop.request_user,
-  async (req, res) => {
-    try {
-      const { id } = req.params;
+  // ==========================================
+  // GET BY ID - Get single room
+  // ==========================================
+  prop.app.get(
+    `${urlAPI}/:id`,
+    prop.api_auth,
+    prop.jwt_auth,
+    prop.request_user,
+    async (req, res) => {
+      try {
+        const { id } = req.params;
 
-      if (id) {
-        if (!mongoose.Types.ObjectId.isValid(id)) {
-          return res.status(400).json({
-            success: false,
-            message: "មិនមានទិន្នន័យក្នុងប្រព័ន្ធ",
+        if (id) {
+          if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({
+              success: false,
+              message: "មិនមានទិន្នន័យក្នុងប្រព័ន្ធ",
+            });
+          }
+
+          var data = await Model.findOne({
+            _id: id,
+            deleted: false,
+          }).populate("floor_id");
+
+          if (!data) {
+            return res.status(404).json({
+              success: false,
+              message: "មិនមានទិន្នន័យក្នុងប្រព័ន្ធ!",
+            });
+          }
+
+          // ✅ Fix: Use findOne or findById to get single building
+          const dataBuilding = await ModelBuilding.findOne({
+            _id: data.floor_id?.building_id,
           });
+
+          // ✅ Convert to object and add building data
+          const roomData = data.toObject();
+          roomData.building = dataBuilding || null;
+
+          return res
+            .status(200)
+            .json({ success: true, message: "ជោគជ័យ", data: roomData });
         }
-
-        var data = await Model.findOne({
-          _id: id,
-          deleted: false,
-        }).populate("floor_id");
-
-        if (!data) {
-          return res.status(404).json({
-            success: false,
-            message: "មិនមានទិន្នន័យក្នុងប្រព័ន្ធ!",
-          });
-        }
-
-        // ✅ Fix: Use findOne or findById to get single building
-        const dataBuilding = await ModelBuilding.findOne({
-          _id: data.floor_id?.building_id
+      } catch (err) {
+        console.error("❌ Error:", err);
+        res.status(500).json({
+          success: false,
+          message: "Internal Error",
+          error: err.message || err,
         });
-
-        // ✅ Convert to object and add building data
-        const roomData = data.toObject();
-        roomData.building = dataBuilding || null;
-
-        return res
-          .status(200)
-          .json({ success: true, message: "ជោគជ័យ", data: roomData });
       }
-    } catch (err) {
-      console.error("❌ Error:", err);
-      res.status(500).json({
-        success: false,
-        message: "Internal Error",
-        error: err.message || err,
-      });
-    }
-  },
-);
+    },
+  );
 
   // ==========================================
-  // GET ALL - Get all rooms
+  // GET ALL - Get all rooms with floor and building
   // ==========================================
   prop.app.get(
     `${urlAPI}-all`,
@@ -186,9 +184,60 @@ prop.app.get(
     prop.request_user,
     async (req, res) => {
       try {
-        const result = await Model.find({
-          deleted: false,
-        }).populate("floor_id")
+        const result = await Model.aggregate([
+          // Step 1: Get only non-deleted rooms
+          {
+            $match: {
+              deleted: false,
+            },
+          },
+          // Step 2: Lookup floor with full data
+          {
+            $lookup: {
+              from: "floors",
+              localField: "floor_id",
+              foreignField: "_id",
+              as: "floor_id",
+            },
+          },
+          // Step 3: Unwind floor data
+          {
+            $unwind: {
+              path: "$floor_id",
+              preserveNullAndEmptyArrays: true,
+            },
+          },
+          // Step 4: Lookup building from floor
+          {
+            $lookup: {
+              from: "buildings",
+              localField: "floor_id.building_id",
+              foreignField: "_id",
+              as: "building_data",
+            },
+          },
+          // Step 5: Unwind building data
+          {
+            $unwind: {
+              path: "$building_data",
+              preserveNullAndEmptyArrays: true,
+            },
+          },
+          // Step 6: Remove unwanted fields
+          {
+            $project: {
+              __v: 0,
+              "floor_id.__v": 0,
+              "building_data.__v": 0,
+            },
+          },
+          // Step 7: Sort by name
+          {
+            $sort: {
+              name: 1,
+            },
+          },
+        ]);
 
         res.status(200).json({
           success: true,
@@ -197,6 +246,7 @@ prop.app.get(
           data: result,
         });
       } catch (err) {
+        console.error("❌ Error:", err);
         res.status(500).json({
           success: false,
           message: "Server error",
@@ -205,8 +255,6 @@ prop.app.get(
       }
     },
   );
-
- 
 
   // ==========================================
   // UPDATE - Update room
@@ -313,13 +361,13 @@ prop.app.get(
         });
 
         // Get floor name for log
-        const floorName = floor_id 
-          ? (await ModelFloor.findById(floor_id))?.name 
+        const floorName = floor_id
+          ? (await ModelFloor.findById(floor_id))?.name
           : (await ModelFloor.findById(existingRoom.floor_id))?.name;
 
         // Log
         await logActivity({
-          title: `បន្ទប់: ${updatedData.name} នៅជាន់ ${floorName || ''} ត្រូវបានកែប្រែ!`,
+          title: `បន្ទប់: ${updatedData.name} នៅជាន់ ${floorName || ""} ត្រូវបានកែប្រែ!`,
           description: `កែប្រែដោយគណនី: ${user_data.firstname + " " + user_data.lastname}`,
           categoryTitle: "building_management",
           createdBy: userId,
@@ -407,7 +455,7 @@ prop.app.get(
 
         // Log
         await logActivity({
-          title: `បន្ទប់: ${room.name} នៅជាន់ ${floor?.name || ''} ត្រូវបានផ្លាស់ទៅធុងសំរាម!`,
+          title: `បន្ទប់: ${room.name} នៅជាន់ ${floor?.name || ""} ត្រូវបានផ្លាស់ទៅធុងសំរាម!`,
           description: `គណនី: ${user_data.firstname + " " + user_data.lastname} បានលុបទិន្នន័យចេញពីប្រព័ន្ធ។`,
           categoryTitle: "building_management",
           createdBy: userId,
@@ -483,7 +531,7 @@ prop.app.get(
 
         // Log
         await logActivity({
-          title: `បន្ទប់: ${room.name} នៅជាន់ ${floor?.name || ''} ត្រូវបានស្ដារមកវិញ!`,
+          title: `បន្ទប់: ${room.name} នៅជាន់ ${floor?.name || ""} ត្រូវបានស្ដារមកវិញ!`,
           description: `គណនី: ${user_data.firstname + " " + user_data.lastname} បានស្ដារទិន្នន័យមកវិញ។`,
           categoryTitle: "building_management",
           createdBy: userId,
@@ -550,7 +598,7 @@ prop.app.get(
 
         // Log
         await logActivity({
-          title: `${roomName} នៅជាន់ ${floor?.name || ''} ត្រូវបានលុបចោលជាអចិន្ត្រៃយ៍!`,
+          title: `${roomName} នៅជាន់ ${floor?.name || ""} ត្រូវបានលុបចោលជាអចិន្ត្រៃយ៍!`,
           description: `គណនី: ${user_data.firstname + " " + user_data.lastname} បានលុបទិន្នន័យចេញពីប្រព័ន្ធជាអចិន្ត្រៃយ៍។`,
           categoryTitle: "building_management",
           createdBy: userId,
@@ -611,28 +659,53 @@ prop.app.get(
     prop.request_user,
     async (req, res) => {
       try {
-        const { user_id: userId } = req.session;
-        const result = await getFilteredMongoDB(req.query, Model, ["floor_id"], [], null);
+       const { user_id: userId } = req.session;
+  
+  // Fetch data
+  const result = await getFilteredMongoDB(
+    req.query,
+    Model,
+    ["floor_id"],
+    [],
+    null,
+  );
 
-        const newData = result.data.map((row) => {
-          const data = row.toObject();
-          return data;
-        });
+  // Fetch all buildings once
+  const allResultBuilding = await ModelBuilding.find().lean();
+  
+  // Create a map for O(1) lookups
+  const buildingMap = new Map(
+    allResultBuilding.map(building => [building._id.toString(), building])
+  );
 
-        res.status(200).json({
-          success: true,
-          data: newData,
-          pagination: result.pagination,
-        });
+  // Transform data efficiently
+  const newData = result.data.map((row) => {
+    const data = row.toObject();
+    
+    // Add building data if exists
+    const buildingId = data.floor_id?.building_id?.toString();
+    if (buildingId && buildingMap.has(buildingId)) {
+      data.building = buildingMap.get(buildingId);
+    }
+    
+    return data;
+  });
+
+  res.status(200).json({
+    success: true,
+    data: newData,
+    pagination: result.pagination,
+    // Remove the 'ss' property in production
+  });
+  
+
       } catch (err) {
         res.status(500).json({ success: false, message: err.message });
       }
     },
   );
 
-
-
-   // ==========================================
+  // ==========================================
   // GET - Pagination with building too
   // ==========================================
   prop.app.get(
@@ -643,17 +716,23 @@ prop.app.get(
     async (req, res) => {
       try {
         const { user_id: userId } = req.session;
-        const result = await getFilteredMongoDB(req.query, Model, ["floor_id"], [], null);
-        const resultBuilding = await ModelBuilding.find({})
+        const result = await getFilteredMongoDB(
+          req.query,
+          Model,
+          ["floor_id"],
+          [],
+          null,
+        );
+        const resultBuilding = await ModelBuilding.find({});
 
         const newData = result.data.map((row) => {
           var data = row.toObject();
           resultBuilding.map((rowBuilding) => {
-              if(row.floor_id?.building_id == rowBuilding.id){
-  data.building_data = rowBuilding
-              }
-          })
-        
+            if (row.floor_id?.building_id == rowBuilding.id) {
+              data.building_data = rowBuilding;
+            }
+          });
+
           return data;
         });
 
