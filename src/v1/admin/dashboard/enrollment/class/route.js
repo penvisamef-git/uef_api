@@ -1765,666 +1765,903 @@ const route = (prop) => {
     },
   );
 
+  prop.app.get(
+    `${urlAPI}-get-all-class-by-id-teacher-only-start/:id`,
+    prop.api_auth,
+    prop.jwt_auth,
+    prop.request_user,
+    async (req, res) => {
+      try {
+        const { id: teacherId } = req.params;
+
+        // Validate teacher ID
+        if (!teacherId || !mongoose.Types.ObjectId.isValid(teacherId)) {
+          return res.status(400).json({
+            success: false,
+            message: "លេខសម្គាល់គ្រូបង្រៀនមិនត្រឹមត្រូវ!",
+          });
+        }
+
+        // Convert to ObjectId for proper comparison
+        const teacherObjectId = new mongoose.Types.ObjectId(teacherId);
+
+        // Build query - ONLY class_status = "start"
+        const query = {
+          deleted: false,
+          class_status: "start", // <-- ONLY START STATUS
+          $or: [
+            { "schedule.teacher_id": teacherId },
+            { "schedule.teacher_id": teacherObjectId },
+          ],
+        };
+
+        // Get ALL classes (no pagination)
+        const classes = await Model.find(query)
+          .populate("major_id")
+          .populate("room_id")
+          .populate("degree_level_id")
+          .populate("shift_id")
+          .populate("year_study_id")
+          .populate("semester_id")
+          .populate({
+            path: "schedule.subject_id",
+            model: "Subject",
+          })
+          .populate({
+            path: "schedule.teacher_id",
+            model: "Teacher",
+          })
+          .populate({
+            path: "schedule.room_id",
+            model: "Room",
+            populate: {
+              path: "floor_id",
+              model: "Floor",
+              populate: {
+                path: "building_id",
+                model: "Building",
+              },
+            },
+          })
+          .populate("schedule.score_option_id")
+          .populate({
+            path: "students.student_id",
+            model: "Student",
+          })
+          .populate("students.score.subject_id")
+          .sort({ created_date: -1 });
+
+        // Return all data without pagination
+        res.status(200).json({
+          success: true,
+          message: "ជោគជ័យ",
+          data: classes,
+          total: classes.length,
+        });
+      } catch (err) {
+        console.error("❌ Error fetching classes by teacher ID:", err);
+        res.status(500).json({
+          success: false,
+          message: "Server error",
+          error: err.message || err,
+        });
+      }
+    },
+  );
+
   // ==========================================
   // GET CLASSES Stard
   // ==========================================
 
-prop.app.get(
-  `${urlAPI}-get-all-started-only`,
+  prop.app.get(
+    `${urlAPI}-get-all-started-only`,
+    prop.api_auth,
+    prop.jwt_auth,
+    prop.request_user,
+    async (req, res) => {
+      try {
+        const getStartedClassData = await Model.find({ class_status: "start" })
+          .populate("major_id")
+          .populate({
+            path: "major_id",
+            populate: {
+              path: "department_id",
+              model: "Department",
+            },
+          })
+          .populate("degree_level_id")
+          .populate("shift_id")
+          .populate("year_study_id")
+          .populate("semester_id")
+          .populate({
+            path: "schedule.subject_id",
+            model: "Subject",
+          })
+          .populate({
+            path: "schedule.teacher_id",
+            model: "Teacher",
+          })
+          .populate({
+            path: "schedule.room_id",
+            model: "Room",
+            populate: {
+              path: "floor_id",
+              model: "Floor",
+              populate: {
+                path: "building_id",
+                model: "Building",
+              },
+            },
+          })
+          .populate("schedule.score_option_id")
+          .populate({
+            path: "students.student_id",
+            model: "Student",
+          })
+          .populate("students.score.subject_id");
+
+        // Collect all unique teachers with their subjects and classes
+        const allTeachersMap = new Map();
+
+        // Group classes by shift using reduce
+        const shifts = getStartedClassData.reduce((acc, cls) => {
+          const shiftId = cls.shift_id?._id?.toString() || "unknown";
+          const existingShift = acc.find((item) => item.shift._id === shiftId);
+
+          // Collect teachers from this class with their subjects
+          const classTeacherSubjects = new Map();
+
+          cls.schedule?.forEach((scheduleItem) => {
+            if (scheduleItem.teacher_id?._id) {
+              const teacherId = scheduleItem.teacher_id._id.toString();
+              const subjectId = scheduleItem.subject_id?._id?.toString();
+              const classId = cls._id.toString();
+
+              if (!classTeacherSubjects.has(teacherId)) {
+                classTeacherSubjects.set(teacherId, new Set());
+              }
+              if (subjectId) {
+                classTeacherSubjects.get(teacherId).add(subjectId);
+              }
+
+              if (!allTeachersMap.has(teacherId)) {
+                const teacher = scheduleItem.teacher_id;
+                allTeachersMap.set(teacherId, {
+                  _id: teacher._id,
+                  info_firstname_en: teacher.info_firstname_en || "",
+                  info_lastname_en: teacher.info_lastname_en || "",
+                  info_firstname_kh: teacher.info_firstname_kh || "",
+                  info_lastname_kh: teacher.info_lastname_kh || "",
+                  info_teacher_uef_id: teacher.info_teacher_uef_id || "",
+                  info_email: teacher.info_email || "",
+                  info_phone_number: teacher.info_phone_number || "",
+                  fullName_en:
+                    teacher.fullName_en ||
+                    `${teacher.info_firstname_en || ""} ${teacher.info_lastname_en || ""}`.trim() ||
+                    "N/A",
+                  fullName_kh:
+                    teacher.fullName_kh ||
+                    `${teacher.info_firstname_kh || ""} ${teacher.info_lastname_kh || ""}`.trim() ||
+                    "N/A",
+                  subjects: new Map(),
+                  classes: new Map(),
+                });
+              }
+
+              if (subjectId && scheduleItem.subject_id) {
+                const teacherData = allTeachersMap.get(teacherId);
+                if (!teacherData.subjects.has(subjectId)) {
+                  teacherData.subjects.set(subjectId, {
+                    _id: subjectId,
+                    name: scheduleItem.subject_id.name || "",
+                    code: scheduleItem.subject_id.code || "",
+                  });
+                }
+              }
+
+              if (classId) {
+                const teacherData = allTeachersMap.get(teacherId);
+                if (!teacherData.classes.has(classId)) {
+                  const majorData = cls.major_id || null;
+                  const departmentData = majorData?.department_id || null;
+
+                  teacherData.classes.set(classId, {
+                    _id: cls._id,
+                    code: cls.code || "",
+                    batch: cls.batch || "",
+                    group_number: cls.group_number || "",
+                    class_status: cls.class_status || "",
+                    major_id: majorData
+                      ? {
+                          _id: majorData._id,
+                          name: majorData.name || "",
+                          name_in_english: majorData.name_in_english || "",
+                          note: majorData.note || "",
+                          status: majorData.status,
+                          deleted: majorData.deleted,
+                          created_by: majorData.created_by,
+                          updated_by: majorData.updated_by,
+                          created_date: majorData.created_date,
+                          updated_date: majorData.updated_date,
+                          department_id: departmentData
+                            ? {
+                                _id: departmentData._id,
+                                name: departmentData.name || "",
+                                name_in_engish:
+                                  departmentData.name_in_engish || "",
+                                note: departmentData.note || "",
+                                status: departmentData.status,
+                                deleted: departmentData.deleted,
+                                created_by: departmentData.created_by,
+                                updated_by: departmentData.updated_by,
+                                created_date: departmentData.created_date,
+                                updated_date: departmentData.updated_date,
+                              }
+                            : null,
+                        }
+                      : null,
+                    degree_level_id: cls.degree_level_id || null,
+                    shift_id: cls.shift_id || null,
+                    year_study_id: cls.year_study_id || null,
+                    semester_id: cls.semester_id || null,
+                    year_study_from: cls.year_study_from || null,
+                    year_study_to: cls.year_study_to || null,
+                    students: cls.students || [],
+                    schedule: cls.schedule || [],
+                  });
+                }
+              }
+            }
+          });
+
+          if (existingShift) {
+            existingShift.classes.push(cls);
+            existingShift.total_classes = existingShift.classes.length;
+
+            classTeacherSubjects.forEach((subjects, teacherId) => {
+              if (!existingShift.teacherSubjects) {
+                existingShift.teacherSubjects = new Map();
+              }
+
+              if (!existingShift.teacherSubjects.has(teacherId)) {
+                existingShift.teacherSubjects.set(teacherId, new Set());
+              }
+              subjects.forEach((subjectId) => {
+                existingShift.teacherSubjects.get(teacherId).add(subjectId);
+              });
+            });
+
+            existingShift.total_teachers = existingShift.teacherSubjects.size;
+          } else {
+            const shiftTeacherSubjects = new Map();
+            classTeacherSubjects.forEach((subjects, teacherId) => {
+              shiftTeacherSubjects.set(teacherId, subjects);
+            });
+
+            acc.push({
+              shift: {
+                _id: shiftId,
+                name: cls.shift_id?.name || "មិនមានវេន",
+                name_in_eng: cls.shift_id?.name_in_eng || "No Shift",
+                note: cls.shift_id?.note || "",
+                status: cls.shift_id?.status ?? true,
+                deleted: cls.shift_id?.deleted ?? false,
+                created_by: cls.shift_id?.created_by || null,
+                updated_by: cls.shift_id?.updated_by || null,
+                created_date: cls.shift_id?.created_date || null,
+                updated_date: cls.shift_id?.updated_date || null,
+              },
+              total_classes: 1,
+              total_teachers: classTeacherSubjects.size,
+              teacherSubjects: shiftTeacherSubjects,
+              classes: [cls],
+            });
+          }
+          return acc;
+        }, []);
+
+        // Group classes by department
+        const departmentMap = new Map();
+
+        getStartedClassData.forEach((cls) => {
+          const department = cls.major_id?.department_id || null;
+          if (department) {
+            const deptId = department._id.toString();
+            if (!departmentMap.has(deptId)) {
+              departmentMap.set(deptId, {
+                department: {
+                  _id: department._id,
+                  name: department.name || "",
+                  name_in_engish: department.name_in_engish || "",
+                  note: department.note || "",
+                  status: department.status,
+                  deleted: department.deleted,
+                  created_by: department.created_by,
+                  updated_by: department.updated_by,
+                  created_date: department.created_date,
+                  updated_date: department.updated_date,
+                },
+                classes: [],
+                total_classes: 0,
+                shifts: new Set(),
+                teachers: new Set(),
+                majors: new Set(),
+              });
+            }
+            departmentMap.get(deptId).classes.push(cls);
+            departmentMap.get(deptId).total_classes =
+              departmentMap.get(deptId).classes.length;
+
+            if (cls.major_id?._id) {
+              departmentMap.get(deptId).majors.add(cls.major_id._id.toString());
+            }
+
+            if (cls.shift_id?._id) {
+              departmentMap.get(deptId).shifts.add(cls.shift_id._id.toString());
+            }
+
+            cls.schedule?.forEach((scheduleItem) => {
+              if (scheduleItem.teacher_id?._id) {
+                departmentMap
+                  .get(deptId)
+                  .teachers.add(scheduleItem.teacher_id._id.toString());
+              }
+            });
+          }
+        });
+
+        // Group classes by degree level
+        const degreeLevelMap = new Map();
+
+        getStartedClassData.forEach((cls) => {
+          const degreeLevel = cls.degree_level_id || null;
+          if (degreeLevel) {
+            const degreeId = degreeLevel._id.toString();
+            if (!degreeLevelMap.has(degreeId)) {
+              degreeLevelMap.set(degreeId, {
+                degree_level: {
+                  _id: degreeLevel._id,
+                  name: degreeLevel.name || "",
+                  name_in_eng: degreeLevel.name_in_eng || "",
+                  code: degreeLevel.code || "",
+                  note: degreeLevel.note || "",
+                  status: degreeLevel.status,
+                  deleted: degreeLevel.deleted,
+                  created_by: degreeLevel.created_by,
+                  updated_by: degreeLevel.updated_by,
+                  created_date: degreeLevel.created_date,
+                  updated_date: degreeLevel.updated_date,
+                },
+                classes: [],
+                total_classes: 0,
+                shifts: new Set(),
+                teachers: new Set(),
+                departments: new Set(),
+                majors: new Set(),
+              });
+            }
+            degreeLevelMap.get(degreeId).classes.push(cls);
+            degreeLevelMap.get(degreeId).total_classes =
+              degreeLevelMap.get(degreeId).classes.length;
+
+            if (cls.major_id?._id) {
+              degreeLevelMap
+                .get(degreeId)
+                .majors.add(cls.major_id._id.toString());
+            }
+
+            if (cls.major_id?.department_id?._id) {
+              degreeLevelMap
+                .get(degreeId)
+                .departments.add(cls.major_id.department_id._id.toString());
+            }
+
+            if (cls.shift_id?._id) {
+              degreeLevelMap
+                .get(degreeId)
+                .shifts.add(cls.shift_id._id.toString());
+            }
+
+            cls.schedule?.forEach((scheduleItem) => {
+              if (scheduleItem.teacher_id?._id) {
+                degreeLevelMap
+                  .get(degreeId)
+                  .teachers.add(scheduleItem.teacher_id._id.toString());
+              }
+            });
+          }
+        });
+
+        // Group classes by major
+        const majorMap = new Map();
+
+        getStartedClassData.forEach((cls) => {
+          const major = cls.major_id || null;
+          if (major) {
+            const majorId = major._id.toString();
+            if (!majorMap.has(majorId)) {
+              majorMap.set(majorId, {
+                major: {
+                  _id: major._id,
+                  name: major.name || "",
+                  name_in_english: major.name_in_english || "",
+                  note: major.note || "",
+                  status: major.status,
+                  deleted: major.deleted,
+                  created_by: major.created_by,
+                  updated_by: major.updated_by,
+                  created_date: major.created_date,
+                  updated_date: major.updated_date,
+                  department_id: major.department_id || null,
+                },
+                classes: [],
+                total_classes: 0,
+                shifts: new Set(),
+                teachers: new Set(),
+                degree_levels: new Set(),
+              });
+            }
+            majorMap.get(majorId).classes.push(cls);
+            majorMap.get(majorId).total_classes =
+              majorMap.get(majorId).classes.length;
+
+            if (cls.degree_level_id?._id) {
+              majorMap
+                .get(majorId)
+                .degree_levels.add(cls.degree_level_id._id.toString());
+            }
+
+            if (cls.shift_id?._id) {
+              majorMap.get(majorId).shifts.add(cls.shift_id._id.toString());
+            }
+
+            cls.schedule?.forEach((scheduleItem) => {
+              if (scheduleItem.teacher_id?._id) {
+                majorMap
+                  .get(majorId)
+                  .teachers.add(scheduleItem.teacher_id._id.toString());
+              }
+            });
+          }
+        });
+
+        // ============================================
+        // NEW: Group classes by room
+        // ============================================
+        const roomMap = new Map();
+
+        getStartedClassData.forEach((cls) => {
+          cls.schedule?.forEach((scheduleItem) => {
+            const room = scheduleItem.room_id || null;
+            if (room) {
+              const roomId = room._id.toString();
+              if (!roomMap.has(roomId)) {
+                // Get floor and building details
+                const floorData = room.floor_id || null;
+                const buildingData = floorData?.building_id || null;
+
+                roomMap.set(roomId, {
+                  room: {
+                    _id: room._id,
+                    name: room.name || "",
+                    floor: floorData
+                      ? {
+                          _id: floorData._id,
+                          name: floorData.name || "",
+                          building: buildingData
+                            ? {
+                                _id: buildingData._id,
+                                name: buildingData.name || "",
+                                note: buildingData.note || "",
+                                status: buildingData.status,
+                                deleted: buildingData.deleted,
+                              }
+                            : null,
+                        }
+                      : null,
+                    note: room.note || "",
+                    status: room.status,
+                    deleted: room.deleted,
+                  },
+                  classes: [],
+                  total_classes: 0,
+                  teachers: new Set(),
+                  subjects: new Set(),
+                  departments: new Set(),
+                  majors: new Set(),
+                  shifts: new Set(),
+                  degree_levels: new Set(),
+                });
+              }
+
+              const roomData = roomMap.get(roomId);
+              // Only add unique classes (prevent duplicates)
+              const classExists = roomData.classes.some(
+                (c) => c._id.toString() === cls._id.toString(),
+              );
+              if (!classExists) {
+                roomData.classes.push(cls);
+                roomData.total_classes = roomData.classes.length;
+              }
+
+              // Collect unique teachers for this room
+              if (scheduleItem.teacher_id?._id) {
+                roomData.teachers.add(scheduleItem.teacher_id._id.toString());
+              }
+
+              // Collect unique subjects for this room
+              if (scheduleItem.subject_id?._id) {
+                roomData.subjects.add(scheduleItem.subject_id._id.toString());
+              }
+
+              // Collect departments
+              if (cls.major_id?.department_id?._id) {
+                roomData.departments.add(
+                  cls.major_id.department_id._id.toString(),
+                );
+              }
+
+              // Collect majors
+              if (cls.major_id?._id) {
+                roomData.majors.add(cls.major_id._id.toString());
+              }
+
+              // Collect shifts
+              if (cls.shift_id?._id) {
+                roomData.shifts.add(cls.shift_id._id.toString());
+              }
+
+              // Collect degree levels
+              if (cls.degree_level_id?._id) {
+                roomData.degree_levels.add(cls.degree_level_id._id.toString());
+              }
+            }
+          });
+        });
+
+        // Convert room map to array with full details
+        const rooms = Array.from(roomMap.values()).map((roomData) => {
+          // Collect subjects with full details for this room
+          const roomSubjects = [];
+          const subjectIds = new Set();
+
+          roomData.classes.forEach((cls) => {
+            cls.schedule?.forEach((scheduleItem) => {
+              if (scheduleItem.subject_id && scheduleItem.subject_id._id) {
+                const subjectId = scheduleItem.subject_id._id.toString();
+                if (!subjectIds.has(subjectId)) {
+                  subjectIds.add(subjectId);
+                  roomSubjects.push({
+                    _id: scheduleItem.subject_id._id,
+                    name: scheduleItem.subject_id.name || "",
+                    code: scheduleItem.subject_id.code || "",
+                  });
+                }
+              }
+            });
+          });
+
+          // Collect teachers with full details for this room
+          const roomTeachers = [];
+          const teacherIds = new Set();
+
+          roomData.classes.forEach((cls) => {
+            cls.schedule?.forEach((scheduleItem) => {
+              if (scheduleItem.teacher_id && scheduleItem.teacher_id._id) {
+                const teacherId = scheduleItem.teacher_id._id.toString();
+                if (!teacherIds.has(teacherId)) {
+                  teacherIds.add(teacherId);
+                  roomTeachers.push({
+                    _id: scheduleItem.teacher_id._id,
+                    fullName_en:
+                      scheduleItem.teacher_id.fullName_en ||
+                      `${scheduleItem.teacher_id.info_firstname_en || ""} ${scheduleItem.teacher_id.info_lastname_en || ""}`.trim() ||
+                      "N/A",
+                    fullName_kh:
+                      scheduleItem.teacher_id.fullName_kh ||
+                      `${scheduleItem.teacher_id.info_firstname_kh || ""} ${scheduleItem.teacher_id.info_lastname_kh || ""}`.trim() ||
+                      "N/A",
+                    info_email: scheduleItem.teacher_id.info_email || "",
+                    info_phone_number:
+                      scheduleItem.teacher_id.info_phone_number || "",
+                  });
+                }
+              }
+            });
+          });
+
+          return {
+            room: roomData.room,
+            total_classes: roomData.total_classes,
+            total_teachers: roomData.teachers.size,
+            total_subjects: roomData.subjects.size,
+            total_departments: roomData.departments.size,
+            total_majors: roomData.majors.size,
+            total_shifts: roomData.shifts.size,
+            total_degree_levels: roomData.degree_levels.size,
+            teachers: roomTeachers,
+            subjects: roomSubjects,
+            classes: roomData.classes,
+          };
+        });
+
+        // Sort rooms by name
+        rooms.sort((a, b) => {
+          const nameA = a.room.name || "";
+          const nameB = b.room.name || "";
+          return nameA.localeCompare(nameB);
+        });
+
+        // ============================================
+        // END OF ROOM GROUPING
+        // ============================================
+
+        // Convert department map to array
+        const departments = Array.from(departmentMap.values()).map((dept) => ({
+          department: dept.department,
+          total_classes: dept.total_classes,
+          total_shifts: dept.shifts.size,
+          total_teachers: dept.teachers.size,
+          total_majors: dept.majors.size,
+          classes: dept.classes,
+        }));
+
+        // Sort departments by name
+        departments.sort((a, b) => {
+          const nameA = a.department.name || "";
+          const nameB = b.department.name || "";
+          return nameA.localeCompare(nameB);
+        });
+
+        // Convert degree level map to array
+        const degreeLevels = Array.from(degreeLevelMap.values()).map(
+          (degree) => ({
+            degree_level: degree.degree_level,
+            total_classes: degree.total_classes,
+            total_shifts: degree.shifts.size,
+            total_teachers: degree.teachers.size,
+            total_departments: degree.departments.size,
+            total_majors: degree.majors.size,
+            classes: degree.classes,
+          }),
+        );
+
+        // Sort degree levels by name
+        degreeLevels.sort((a, b) => {
+          const nameA = a.degree_level.name || "";
+          const nameB = b.degree_level.name || "";
+          return nameA.localeCompare(nameB);
+        });
+
+        // Convert major map to array
+        const majors = Array.from(majorMap.values()).map((major) => ({
+          major: major.major,
+          total_classes: major.total_classes,
+          total_shifts: major.shifts.size,
+          total_teachers: major.teachers.size,
+          total_degree_levels: major.degree_levels.size,
+          classes: major.classes,
+        }));
+
+        // Sort majors by name
+        majors.sort((a, b) => {
+          const nameA = a.major.name || "";
+          const nameB = b.major.name || "";
+          return nameA.localeCompare(nameB);
+        });
+
+        // Convert all teachers map to array with subjects and classes
+        const allTeachers = Array.from(allTeachersMap.values()).map(
+          (teacher) => ({
+            _id: teacher._id,
+            info_firstname_en: teacher.info_firstname_en,
+            info_lastname_en: teacher.info_lastname_en,
+            info_firstname_kh: teacher.info_firstname_kh,
+            info_lastname_kh: teacher.info_lastname_kh,
+            info_teacher_uef_id: teacher.info_teacher_uef_id,
+            info_email: teacher.info_email,
+            info_phone_number: teacher.info_phone_number,
+            fullName_en: teacher.fullName_en,
+            fullName_kh: teacher.fullName_kh,
+            subjects: Array.from(teacher.subjects.values()),
+            total_subjects: teacher.subjects.size,
+            classes: Array.from(teacher.classes.values()),
+            total_classes: teacher.classes.size,
+          }),
+        );
+
+        // Process shifts to include teachers with their subjects
+        const processedShifts = shifts.map((shift) => {
+          const shiftTeachers = [];
+          if (shift.teacherSubjects) {
+            shift.teacherSubjects.forEach((subjectIds, teacherId) => {
+              const teacherData = allTeachersMap.get(teacherId);
+              if (teacherData) {
+                const subjects = Array.from(subjectIds)
+                  .map((subjectId) => {
+                    const subject = teacherData.subjects.get(subjectId);
+                    return subject
+                      ? {
+                          _id: subject._id,
+                          name: subject.name,
+                          code: subject.code,
+                        }
+                      : null;
+                  })
+                  .filter(Boolean);
+
+                const teacherClasses = Array.from(
+                  teacherData.classes.values(),
+                ).filter(
+                  (cls) => cls.shift_id?._id?.toString() === shift.shift._id,
+                );
+
+                shiftTeachers.push({
+                  _id: teacherData._id,
+                  fullName_en: teacherData.fullName_en,
+                  fullName_kh: teacherData.fullName_kh,
+                  info_email: teacherData.info_email,
+                  info_phone_number: teacherData.info_phone_number,
+                  subjects: subjects,
+                  total_subjects: subjects.length,
+                  classes: teacherClasses,
+                  total_classes: teacherClasses.length,
+                });
+              }
+            });
+          }
+
+          return {
+            shift: shift.shift,
+            total_classes: shift.total_classes,
+            total_teachers: shift.total_teachers,
+            teachers: shiftTeachers,
+            classes: shift.classes,
+          };
+        });
+
+        // Sort shifts by name
+        processedShifts.sort((a, b) => {
+          const nameA = a.shift.name || "";
+          const nameB = b.shift.name || "";
+          return nameA.localeCompare(nameB);
+        });
+
+        // ============================================
+        // UPDATED RESPONSE WITH ROOMS
+        // ============================================
+        res.json({
+          success: true,
+          total_classes: getStartedClassData.length,
+          total_departments: departments.length,
+          total_degree_levels: degreeLevels.length,
+          total_majors: majors.length,
+          total_shifts: processedShifts.length,
+          total_teachers: allTeachers.length,
+          total_rooms: rooms.length,
+          departments: departments,
+          degree_levels: degreeLevels,
+          majors: majors,
+          teachers: allTeachers,
+          shifts: processedShifts,
+          rooms: rooms,
+          class: getStartedClassData,
+        });
+      } catch (error) {
+        console.error("❌ Error getting started classes:", error);
+        res.status(500).json({
+          success: false,
+          message: "មានបញ្ហាក្នុងការទាញយកទិន្នន័យ!",
+          error: error.message,
+        });
+      }
+    },
+  );
+
+
+
+
+
+  // ==========================================
+// UPDATE STUDENT PASS STATUS
+// ==========================================
+prop.app.put(
+  `${urlAPI}/:classId/student-pass-status`,
   prop.api_auth,
   prop.jwt_auth,
   prop.request_user,
   async (req, res) => {
     try {
-      const getStartedClassData = await Model.find({ class_status: "start" })
-        .populate("major_id")
-        .populate({
-          path: "major_id",
-          populate: {
-            path: "department_id",
-            model: "Department",
-          },
-        })
-        .populate("degree_level_id")
-        .populate("shift_id")
-        .populate("year_study_id")
-        .populate("semester_id")
-        .populate({
-          path: "schedule.subject_id",
-          model: "Subject",
-        })
-        .populate({
-          path: "schedule.teacher_id",
-          model: "Teacher",
-        })
-        .populate({
-          path: "schedule.room_id",
-          model: "Room",
-          populate: {
-            path: "floor_id",
-            model: "Floor",
-            populate: {
-              path: "building_id",
-              model: "Building",
-            },
-          },
-        })
-        .populate("schedule.score_option_id")
-        .populate({
-          path: "students.student_id",
-          model: "Student",
-        })
-        .populate("students.score.subject_id");
+      const { classId } = req.params;
+      const { student_id, is_passed } = req.body;
+      const { user_id: userId } = req.session;
 
-      // Collect all unique teachers with their subjects and classes
-      const allTeachersMap = new Map();
-
-      // Group classes by shift using reduce
-      const shifts = getStartedClassData.reduce((acc, cls) => {
-        const shiftId = cls.shift_id?._id?.toString() || "unknown";
-        const existingShift = acc.find((item) => item.shift._id === shiftId);
-
-        // Collect teachers from this class with their subjects
-        const classTeacherSubjects = new Map();
-
-        cls.schedule?.forEach(scheduleItem => {
-          if (scheduleItem.teacher_id?._id) {
-            const teacherId = scheduleItem.teacher_id._id.toString();
-            const subjectId = scheduleItem.subject_id?._id?.toString();
-            const classId = cls._id.toString();
-            
-            if (!classTeacherSubjects.has(teacherId)) {
-              classTeacherSubjects.set(teacherId, new Set());
-            }
-            if (subjectId) {
-              classTeacherSubjects.get(teacherId).add(subjectId);
-            }
-            
-            if (!allTeachersMap.has(teacherId)) {
-              const teacher = scheduleItem.teacher_id;
-              allTeachersMap.set(teacherId, {
-                _id: teacher._id,
-                info_firstname_en: teacher.info_firstname_en || '',
-                info_lastname_en: teacher.info_lastname_en || '',
-                info_firstname_kh: teacher.info_firstname_kh || '',
-                info_lastname_kh: teacher.info_lastname_kh || '',
-                info_teacher_uef_id: teacher.info_teacher_uef_id || '',
-                info_email: teacher.info_email || '',
-                info_phone_number: teacher.info_phone_number || '',
-                fullName_en: teacher.fullName_en || `${teacher.info_firstname_en || ''} ${teacher.info_lastname_en || ''}`.trim() || 'N/A',
-                fullName_kh: teacher.fullName_kh || `${teacher.info_firstname_kh || ''} ${teacher.info_lastname_kh || ''}`.trim() || 'N/A',
-                subjects: new Map(),
-                classes: new Map(),
-              });
-            }
-            
-            if (subjectId && scheduleItem.subject_id) {
-              const teacherData = allTeachersMap.get(teacherId);
-              if (!teacherData.subjects.has(subjectId)) {
-                teacherData.subjects.set(subjectId, {
-                  _id: subjectId,
-                  name: scheduleItem.subject_id.name || '',
-                  code: scheduleItem.subject_id.code || '',
-                });
-              }
-            }
-
-            if (classId) {
-              const teacherData = allTeachersMap.get(teacherId);
-              if (!teacherData.classes.has(classId)) {
-                const majorData = cls.major_id || null;
-                const departmentData = majorData?.department_id || null;
-                
-                teacherData.classes.set(classId, {
-                  _id: cls._id,
-                  code: cls.code || '',
-                  batch: cls.batch || '',
-                  group_number: cls.group_number || '',
-                  class_status: cls.class_status || '',
-                  major_id: majorData ? {
-                    _id: majorData._id,
-                    name: majorData.name || '',
-                    name_in_english: majorData.name_in_english || '',
-                    note: majorData.note || '',
-                    status: majorData.status,
-                    deleted: majorData.deleted,
-                    created_by: majorData.created_by,
-                    updated_by: majorData.updated_by,
-                    created_date: majorData.created_date,
-                    updated_date: majorData.updated_date,
-                    department_id: departmentData ? {
-                      _id: departmentData._id,
-                      name: departmentData.name || '',
-                      name_in_engish: departmentData.name_in_engish || '',
-                      note: departmentData.note || '',
-                      status: departmentData.status,
-                      deleted: departmentData.deleted,
-                      created_by: departmentData.created_by,
-                      updated_by: departmentData.updated_by,
-                      created_date: departmentData.created_date,
-                      updated_date: departmentData.updated_date,
-                    } : null,
-                  } : null,
-                  degree_level_id: cls.degree_level_id || null,
-                  shift_id: cls.shift_id || null,
-                  year_study_id: cls.year_study_id || null,
-                  semester_id: cls.semester_id || null,
-                  year_study_from: cls.year_study_from || null,
-                  year_study_to: cls.year_study_to || null,
-                  students: cls.students || [],
-                  schedule: cls.schedule || [],
-                });
-              }
-            }
-          }
+      // Validation
+      if (!mongoose.Types.ObjectId.isValid(classId)) {
+        return res.status(400).json({
+          success: false,
+          message: "ID ថ្នាក់មិនត្រឹមត្រូវ!",
         });
-
-        if (existingShift) {
-          existingShift.classes.push(cls);
-          existingShift.total_classes = existingShift.classes.length;
-          
-          classTeacherSubjects.forEach((subjects, teacherId) => {
-            if (!existingShift.teacherSubjects) {
-              existingShift.teacherSubjects = new Map();
-            }
-            
-            if (!existingShift.teacherSubjects.has(teacherId)) {
-              existingShift.teacherSubjects.set(teacherId, new Set());
-            }
-            subjects.forEach(subjectId => {
-              existingShift.teacherSubjects.get(teacherId).add(subjectId);
-            });
-          });
-          
-          existingShift.total_teachers = existingShift.teacherSubjects.size;
-          
-        } else {
-          const shiftTeacherSubjects = new Map();
-          classTeacherSubjects.forEach((subjects, teacherId) => {
-            shiftTeacherSubjects.set(teacherId, subjects);
-          });
-          
-          acc.push({
-            shift: {
-              _id: shiftId,
-              name: cls.shift_id?.name || "មិនមានវេន",
-              name_in_eng: cls.shift_id?.name_in_eng || "No Shift",
-              note: cls.shift_id?.note || "",
-              status: cls.shift_id?.status ?? true,
-              deleted: cls.shift_id?.deleted ?? false,
-              created_by: cls.shift_id?.created_by || null,
-              updated_by: cls.shift_id?.updated_by || null,
-              created_date: cls.shift_id?.created_date || null,
-              updated_date: cls.shift_id?.updated_date || null,
-            },
-            total_classes: 1,
-            total_teachers: classTeacherSubjects.size,
-            teacherSubjects: shiftTeacherSubjects,
-            classes: [cls],
-          });
-        }
-        return acc;
-      }, []);
-
-      // Group classes by department
-      const departmentMap = new Map();
-      
-      getStartedClassData.forEach(cls => {
-        const department = cls.major_id?.department_id || null;
-        if (department) {
-          const deptId = department._id.toString();
-          if (!departmentMap.has(deptId)) {
-            departmentMap.set(deptId, {
-              department: {
-                _id: department._id,
-                name: department.name || '',
-                name_in_engish: department.name_in_engish || '',
-                note: department.note || '',
-                status: department.status,
-                deleted: department.deleted,
-                created_by: department.created_by,
-                updated_by: department.updated_by,
-                created_date: department.created_date,
-                updated_date: department.updated_date,
-              },
-              classes: [],
-              total_classes: 0,
-              shifts: new Set(),
-              teachers: new Set(),
-              majors: new Set(),
-            });
-          }
-          departmentMap.get(deptId).classes.push(cls);
-          departmentMap.get(deptId).total_classes = departmentMap.get(deptId).classes.length;
-          
-          if (cls.major_id?._id) {
-            departmentMap.get(deptId).majors.add(cls.major_id._id.toString());
-          }
-          
-          if (cls.shift_id?._id) {
-            departmentMap.get(deptId).shifts.add(cls.shift_id._id.toString());
-          }
-          
-          cls.schedule?.forEach(scheduleItem => {
-            if (scheduleItem.teacher_id?._id) {
-              departmentMap.get(deptId).teachers.add(scheduleItem.teacher_id._id.toString());
-            }
-          });
-        }
-      });
-
-      // Group classes by degree level
-      const degreeLevelMap = new Map();
-      
-      getStartedClassData.forEach(cls => {
-        const degreeLevel = cls.degree_level_id || null;
-        if (degreeLevel) {
-          const degreeId = degreeLevel._id.toString();
-          if (!degreeLevelMap.has(degreeId)) {
-            degreeLevelMap.set(degreeId, {
-              degree_level: {
-                _id: degreeLevel._id,
-                name: degreeLevel.name || '',
-                name_in_eng: degreeLevel.name_in_eng || '',
-                code: degreeLevel.code || '',
-                note: degreeLevel.note || '',
-                status: degreeLevel.status,
-                deleted: degreeLevel.deleted,
-                created_by: degreeLevel.created_by,
-                updated_by: degreeLevel.updated_by,
-                created_date: degreeLevel.created_date,
-                updated_date: degreeLevel.updated_date,
-              },
-              classes: [],
-              total_classes: 0,
-              shifts: new Set(),
-              teachers: new Set(),
-              departments: new Set(),
-              majors: new Set(),
-            });
-          }
-          degreeLevelMap.get(degreeId).classes.push(cls);
-          degreeLevelMap.get(degreeId).total_classes = degreeLevelMap.get(degreeId).classes.length;
-          
-          if (cls.major_id?._id) {
-            degreeLevelMap.get(degreeId).majors.add(cls.major_id._id.toString());
-          }
-          
-          if (cls.major_id?.department_id?._id) {
-            degreeLevelMap.get(degreeId).departments.add(cls.major_id.department_id._id.toString());
-          }
-          
-          if (cls.shift_id?._id) {
-            degreeLevelMap.get(degreeId).shifts.add(cls.shift_id._id.toString());
-          }
-          
-          cls.schedule?.forEach(scheduleItem => {
-            if (scheduleItem.teacher_id?._id) {
-              degreeLevelMap.get(degreeId).teachers.add(scheduleItem.teacher_id._id.toString());
-            }
-          });
-        }
-      });
-
-      // Group classes by major
-      const majorMap = new Map();
-      
-      getStartedClassData.forEach(cls => {
-        const major = cls.major_id || null;
-        if (major) {
-          const majorId = major._id.toString();
-          if (!majorMap.has(majorId)) {
-            majorMap.set(majorId, {
-              major: {
-                _id: major._id,
-                name: major.name || '',
-                name_in_english: major.name_in_english || '',
-                note: major.note || '',
-                status: major.status,
-                deleted: major.deleted,
-                created_by: major.created_by,
-                updated_by: major.updated_by,
-                created_date: major.created_date,
-                updated_date: major.updated_date,
-                department_id: major.department_id || null,
-              },
-              classes: [],
-              total_classes: 0,
-              shifts: new Set(),
-              teachers: new Set(),
-              degree_levels: new Set(),
-            });
-          }
-          majorMap.get(majorId).classes.push(cls);
-          majorMap.get(majorId).total_classes = majorMap.get(majorId).classes.length;
-          
-          if (cls.degree_level_id?._id) {
-            majorMap.get(majorId).degree_levels.add(cls.degree_level_id._id.toString());
-          }
-          
-          if (cls.shift_id?._id) {
-            majorMap.get(majorId).shifts.add(cls.shift_id._id.toString());
-          }
-          
-          cls.schedule?.forEach(scheduleItem => {
-            if (scheduleItem.teacher_id?._id) {
-              majorMap.get(majorId).teachers.add(scheduleItem.teacher_id._id.toString());
-            }
-          });
-        }
-      });
-
-      // ============================================
-      // NEW: Group classes by room
-      // ============================================
-      const roomMap = new Map();
-
-      getStartedClassData.forEach(cls => {
-        cls.schedule?.forEach(scheduleItem => {
-          const room = scheduleItem.room_id || null;
-          if (room) {
-            const roomId = room._id.toString();
-            if (!roomMap.has(roomId)) {
-              // Get floor and building details
-              const floorData = room.floor_id || null;
-              const buildingData = floorData?.building_id || null;
-              
-              roomMap.set(roomId, {
-                room: {
-                  _id: room._id,
-                  name: room.name || '',
-                  floor: floorData ? {
-                    _id: floorData._id,
-                    name: floorData.name || '',
-                    building: buildingData ? {
-                      _id: buildingData._id,
-                      name: buildingData.name || '',
-                      note: buildingData.note || '',
-                      status: buildingData.status,
-                      deleted: buildingData.deleted,
-                    } : null,
-                  } : null,
-                  note: room.note || '',
-                  status: room.status,
-                  deleted: room.deleted,
-                },
-                classes: [],
-                total_classes: 0,
-                teachers: new Set(),
-                subjects: new Set(),
-                departments: new Set(),
-                majors: new Set(),
-                shifts: new Set(),
-                degree_levels: new Set(),
-              });
-            }
-            
-            const roomData = roomMap.get(roomId);
-            // Only add unique classes (prevent duplicates)
-            const classExists = roomData.classes.some(c => c._id.toString() === cls._id.toString());
-            if (!classExists) {
-              roomData.classes.push(cls);
-              roomData.total_classes = roomData.classes.length;
-            }
-            
-            // Collect unique teachers for this room
-            if (scheduleItem.teacher_id?._id) {
-              roomData.teachers.add(scheduleItem.teacher_id._id.toString());
-            }
-            
-            // Collect unique subjects for this room
-            if (scheduleItem.subject_id?._id) {
-              roomData.subjects.add(scheduleItem.subject_id._id.toString());
-            }
-            
-            // Collect departments
-            if (cls.major_id?.department_id?._id) {
-              roomData.departments.add(cls.major_id.department_id._id.toString());
-            }
-            
-            // Collect majors
-            if (cls.major_id?._id) {
-              roomData.majors.add(cls.major_id._id.toString());
-            }
-            
-            // Collect shifts
-            if (cls.shift_id?._id) {
-              roomData.shifts.add(cls.shift_id._id.toString());
-            }
-            
-            // Collect degree levels
-            if (cls.degree_level_id?._id) {
-              roomData.degree_levels.add(cls.degree_level_id._id.toString());
-            }
-          }
+      }
+      if (!mongoose.Types.ObjectId.isValid(student_id)) {
+        return res.status(400).json({
+          success: false,
+          message: "ID សិស្សមិនត្រឹមត្រូវ!",
         });
-      });
-
-      // Convert room map to array with full details
-      const rooms = Array.from(roomMap.values()).map(roomData => {
-        // Collect subjects with full details for this room
-        const roomSubjects = [];
-        const subjectIds = new Set();
-        
-        roomData.classes.forEach(cls => {
-          cls.schedule?.forEach(scheduleItem => {
-            if (scheduleItem.subject_id && scheduleItem.subject_id._id) {
-              const subjectId = scheduleItem.subject_id._id.toString();
-              if (!subjectIds.has(subjectId)) {
-                subjectIds.add(subjectId);
-                roomSubjects.push({
-                  _id: scheduleItem.subject_id._id,
-                  name: scheduleItem.subject_id.name || '',
-                  code: scheduleItem.subject_id.code || '',
-                });
-              }
-            }
-          });
+      }
+      if (typeof is_passed !== 'boolean') {
+        return res.status(400).json({
+          success: false,
+          message: "is_passed ត្រូវតែជា boolean!",
         });
-        
-        // Collect teachers with full details for this room
-        const roomTeachers = [];
-        const teacherIds = new Set();
-        
-        roomData.classes.forEach(cls => {
-          cls.schedule?.forEach(scheduleItem => {
-            if (scheduleItem.teacher_id && scheduleItem.teacher_id._id) {
-              const teacherId = scheduleItem.teacher_id._id.toString();
-              if (!teacherIds.has(teacherId)) {
-                teacherIds.add(teacherId);
-                roomTeachers.push({
-                  _id: scheduleItem.teacher_id._id,
-                  fullName_en: scheduleItem.teacher_id.fullName_en || 
-                    `${scheduleItem.teacher_id.info_firstname_en || ''} ${scheduleItem.teacher_id.info_lastname_en || ''}`.trim() || 'N/A',
-                  fullName_kh: scheduleItem.teacher_id.fullName_kh || 
-                    `${scheduleItem.teacher_id.info_firstname_kh || ''} ${scheduleItem.teacher_id.info_lastname_kh || ''}`.trim() || 'N/A',
-                  info_email: scheduleItem.teacher_id.info_email || '',
-                  info_phone_number: scheduleItem.teacher_id.info_phone_number || '',
-                });
-              }
-            }
-          });
+      }
+
+      const ClassModel = require("../class/model");
+
+      // Find the class
+      const classData = await ClassModel.findOne({
+        _id: classId,
+        deleted: false,
+      });
+
+      if (!classData) {
+        return res.status(404).json({
+          success: false,
+          message: "មិនមានថ្នាក់ក្នុងប្រព័ន្ធ!",
         });
-        
-        return {
-          room: roomData.room,
-          total_classes: roomData.total_classes,
-          total_teachers: roomData.teachers.size,
-          total_subjects: roomData.subjects.size,
-          total_departments: roomData.departments.size,
-          total_majors: roomData.majors.size,
-          total_shifts: roomData.shifts.size,
-          total_degree_levels: roomData.degree_levels.size,
-          teachers: roomTeachers,
-          subjects: roomSubjects,
-          classes: roomData.classes,
-        };
+      }
+
+      // Find the student in the class
+      const studentIndex = classData.students.findIndex(
+        (s) => s.student_id.toString() === student_id.toString()
+      );
+
+      if (studentIndex === -1) {
+        return res.status(404).json({
+          success: false,
+          message: "មិនមានសិស្សនេះក្នុងថ្នាក់!",
+        });
+      }
+
+      // Update the student's is_passed status
+      classData.students[studentIndex].is_passed = is_passed;
+      classData.updated_by = userId;
+      classData.updated_date = new Date();
+
+      await classData.save();
+
+      // Log activity
+      const studentName = classData.students[studentIndex].student_id
+        ? `${classData.students[studentIndex].student_id.firstname || ""} ${classData.students[studentIndex].student_id.lastname || ""}`.trim()
+        : "N/A";
+
+      await logActivity({
+        title: `កែប្រែលទ្ធផលសិស្ស`,
+        description: `កែប្រែលទ្ធផលសិស្ស ${studentName} ទៅ ${is_passed ? "ជាប់" : "ធ្លាក់"}`,
+        categoryTitle: "class_logs",
+        createdBy: userId,
+        req,
       });
 
-      // Sort rooms by name
-      rooms.sort((a, b) => {
-        const nameA = a.room.name || '';
-        const nameB = b.room.name || '';
-        return nameA.localeCompare(nameB);
-      });
-
-      // ============================================
-      // END OF ROOM GROUPING
-      // ============================================
-
-      // Convert department map to array
-      const departments = Array.from(departmentMap.values()).map(dept => ({
-        department: dept.department,
-        total_classes: dept.total_classes,
-        total_shifts: dept.shifts.size,
-        total_teachers: dept.teachers.size,
-        total_majors: dept.majors.size,
-        classes: dept.classes,
-      }));
-
-      // Sort departments by name
-      departments.sort((a, b) => {
-        const nameA = a.department.name || '';
-        const nameB = b.department.name || '';
-        return nameA.localeCompare(nameB);
-      });
-
-      // Convert degree level map to array
-      const degreeLevels = Array.from(degreeLevelMap.values()).map(degree => ({
-        degree_level: degree.degree_level,
-        total_classes: degree.total_classes,
-        total_shifts: degree.shifts.size,
-        total_teachers: degree.teachers.size,
-        total_departments: degree.departments.size,
-        total_majors: degree.majors.size,
-        classes: degree.classes,
-      }));
-
-      // Sort degree levels by name
-      degreeLevels.sort((a, b) => {
-        const nameA = a.degree_level.name || '';
-        const nameB = b.degree_level.name || '';
-        return nameA.localeCompare(nameB);
-      });
-
-      // Convert major map to array
-      const majors = Array.from(majorMap.values()).map(major => ({
-        major: major.major,
-        total_classes: major.total_classes,
-        total_shifts: major.shifts.size,
-        total_teachers: major.teachers.size,
-        total_degree_levels: major.degree_levels.size,
-        classes: major.classes,
-      }));
-
-      // Sort majors by name
-      majors.sort((a, b) => {
-        const nameA = a.major.name || '';
-        const nameB = b.major.name || '';
-        return nameA.localeCompare(nameB);
-      });
-
-      // Convert all teachers map to array with subjects and classes
-      const allTeachers = Array.from(allTeachersMap.values()).map(teacher => ({
-        _id: teacher._id,
-        info_firstname_en: teacher.info_firstname_en,
-        info_lastname_en: teacher.info_lastname_en,
-        info_firstname_kh: teacher.info_firstname_kh,
-        info_lastname_kh: teacher.info_lastname_kh,
-        info_teacher_uef_id: teacher.info_teacher_uef_id,
-        info_email: teacher.info_email,
-        info_phone_number: teacher.info_phone_number,
-        fullName_en: teacher.fullName_en,
-        fullName_kh: teacher.fullName_kh,
-        subjects: Array.from(teacher.subjects.values()),
-        total_subjects: teacher.subjects.size,
-        classes: Array.from(teacher.classes.values()),
-        total_classes: teacher.classes.size,
-      }));
-
-      // Process shifts to include teachers with their subjects
-      const processedShifts = shifts.map(shift => {
-        const shiftTeachers = [];
-        if (shift.teacherSubjects) {
-          shift.teacherSubjects.forEach((subjectIds, teacherId) => {
-            const teacherData = allTeachersMap.get(teacherId);
-            if (teacherData) {
-              const subjects = Array.from(subjectIds).map(subjectId => {
-                const subject = teacherData.subjects.get(subjectId);
-                return subject ? { _id: subject._id, name: subject.name, code: subject.code } : null;
-              }).filter(Boolean);
-              
-              const teacherClasses = Array.from(teacherData.classes.values())
-                .filter(cls => cls.shift_id?._id?.toString() === shift.shift._id);
-              
-              shiftTeachers.push({
-                _id: teacherData._id,
-                fullName_en: teacherData.fullName_en,
-                fullName_kh: teacherData.fullName_kh,
-                info_email: teacherData.info_email,
-                info_phone_number: teacherData.info_phone_number,
-                subjects: subjects,
-                total_subjects: subjects.length,
-                classes: teacherClasses,
-                total_classes: teacherClasses.length,
-              });
-            }
-          });
-        }
-        
-        return {
-          shift: shift.shift,
-          total_classes: shift.total_classes,
-          total_teachers: shift.total_teachers,
-          teachers: shiftTeachers,
-          classes: shift.classes,
-        };
-      });
-
-      // Sort shifts by name
-      processedShifts.sort((a, b) => {
-        const nameA = a.shift.name || "";
-        const nameB = b.shift.name || "";
-        return nameA.localeCompare(nameB);
-      });
-
-      // ============================================
-      // UPDATED RESPONSE WITH ROOMS
-      // ============================================
-      res.json({
+      res.status(200).json({
         success: true,
-        total_classes: getStartedClassData.length,
-        total_departments: departments.length,
-        total_degree_levels: degreeLevels.length,
-        total_majors: majors.length,
-        total_shifts: processedShifts.length,
-        total_teachers: allTeachers.length,
-        total_rooms: rooms.length,
-        departments: departments,
-        degree_levels: degreeLevels,
-        majors: majors,
-        teachers: allTeachers,
-        shifts: processedShifts,
-        rooms: rooms,
-        class: getStartedClassData,
+        message: `បានកែប្រែលទ្ធផលសិស្សដោយជោគជ័យ!`,
+        data: {
+          student_id: student_id,
+          is_passed: is_passed,
+        },
       });
+
     } catch (error) {
-      console.error("❌ Error getting started classes:", error);
+      console.error("❌ Error updating student pass status:", error);
       res.status(500).json({
         success: false,
-        message: "មានបញ្ហាក្នុងការទាញយកទិន្នន័យ!",
-        error: error.message,
+        message: "មានបញ្ហាក្នុងការកែប្រែលទ្ធផល! សូមព្យាយាមម្តងទៀត",
+        error: process.env.NODE_ENV === "development" ? error.message : undefined,
       });
     }
-  },
+  }
 );
-
-
-
-
-
-
-
 };
 
 module.exports = route;

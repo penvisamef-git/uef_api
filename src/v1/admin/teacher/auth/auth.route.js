@@ -118,123 +118,128 @@ const route = (prop) => {
   );
 
   prop.app.post(`${urlAPI}/login`, prop.api_auth, async (req, res) => {
-     const { info_email, password } = req.body;
-     
-        // 1. Validate required fields
-        if (!info_email || !password) {
-            return res.status(400).json({
-                success: false,
-                message: "សូមបំពេញអ៊ីមែល និងពាក្យសម្ងាត់!"
-            });
-        }
+    try {
+      const { info_email, password } = req.body;
+      // 1. Validate required fields
+      if (!info_email || !password) {
+        return res.status(400).json({
+          success: false,
+          message: "សូមបំពេញអ៊ីមែល និងពាក្យសម្ងាត់!",
+        });
+      }
 
-        // 2. Find user by email
-        const userTeacher = await User.findOne({ info_email: info_email });
-        if (!userTeacher) {
-            return res.status(404).json({
-                success: false,
-                message: "គណនីមិនមានក្នុងប្រព័ន្ធ!"
-            });
-        } 
+      // 2. Find user by email
+      const userTeacher = await User.findOne({ info_email: info_email });
+      if (!userTeacher) {
+        return res.status(404).json({
+          success: false,
+          message: "គណនីមិនមានក្នុងប្រព័ន្ធ!",
+        });
+      }
 
-        var user = {
-         info_email :   userTeacher.info_email,
-          info_firstname_en : userTeacher.info_firstname_en,
-          info_lastname_en: userTeacher.info_lastname_en,
-          info_firstname_kh: userTeacher.info_firstname_kh,
-          info_lastname_kh: userTeacher.info_lastname_kh,
-          info_teacher_uef_id: userTeacher.info_teacher_uef_id,
-          info_national_id: userTeacher.info_national_id,
-          status: userTeacher.status,
-          deleted: userTeacher.deleted,
-          create_by: userTeacher.created_by,
-          updated_by: userTeacher.updated_by,
-          _id: userTeacher._id
-        }
+      // 3. Check password using bcrypt (since passwords are now hashed)
+      const bcrypt = require("bcrypt");
+      const isPasswordValid = await bcrypt.compare(
+        password,
+        userTeacher.password,
+      );
+      if (!isPasswordValid) {
+        return res.status(401).json({
+          success: false,
+          message: "ពាក្យសម្ងាត់មិនត្រឹមត្រូវ!",
+        });
+      }
 
+      // 4. Check if account is deleted
+      if (userTeacher.deleted === true) {
+        return res.status(404).json({
+          success: false,
+          message: "គណនីនេះត្រូវបានលុបចេញ!",
+        });
+      }
 
+      // 5. Check if account is inactive
+      if (userTeacher.status === false) {
+        return res.status(403).json({
+          success: false,
+          message: "គណនីត្រូវបានផ្អាក!",
+        });
+      }
 
+      // 6. Prepare user data (exclude sensitive fields)
+      const user = {
+        info_email: userTeacher.info_email,
+        info_firstname_en: userTeacher.info_firstname_en,
+        info_lastname_en: userTeacher.info_lastname_en,
+        info_firstname_kh: userTeacher.info_firstname_kh,
+        info_lastname_kh: userTeacher.info_lastname_kh,
+        info_teacher_uef_id: userTeacher.info_teacher_uef_id,
+        info_national_id: userTeacher.info_national_id,
+        status: userTeacher.status,
+        deleted: userTeacher.deleted,
+        created_by: userTeacher.created_by,
+        updated_by: userTeacher.updated_by,
+        _id: userTeacher._id,
+      };
 
-
-
-
-
-        // 3. Check if account is deleted
-        if (user.deleted === true) {
-            return res.status(404).json({
-                success: false,
-                message: "គណនីនេះត្រូវបានលុបចេញ!"
-            });
-        }
-
-        // 4. Check if account is inactive
-        if (user.status === false) {
-            return res.status(403).json({
-                success: false,
-                message: "គណនីត្រូវបានផ្អាក!"
-            });
-        }
-
-      
-
-
-
-    // 4. Log activity after successful login
-    await logActivity({
-      title: `ឧបករណ៍ ${helper.extractDeviceInfo(req).device} បានចូលគណនី (សាអេឡិចត្រូនិច : ${info_email})`,
-      description: `ប្រើប្រាស់ ${helper.extractDeviceInfo(req).browser} ចូលក្នុងប្រព័ន្ធ - ${helper.cambodiaDate()}`,
-      categoryTitle: "auth",
-      createdBy: user._id,
-      req,
-    });
-
-    // 5. Create session
-    const access_token = prop.jwt.sign(
-      { userName: info_email, user: password },
-      process.env.JWT_SECRET,
-      { expiresIn: "720h" },
-    );
-    const existingSession = await Session.findOne({
-      user_id: user._id,
-    });
-
-    if (existingSession) {
-      existingSession.time = helper.cambodiaDate();
-      existingSession.access_token = access_token;
-      existingSession.device = helper.extractDeviceInfo(req);
-      existingSession.user_data = user;
-      await existingSession.save();
-    } else {
-      const session = new Session({
-        user_id: user._id,
-        device: helper.extractDeviceInfo(req),
-        create_by: user._id,
-        time: helper.cambodiaDate(),
-        access_token: access_token,
-        user_data: user,
+      // 7. Log activity after successful login
+      await logActivity({
+        title: `ឧបករណ៍ ${helper.extractDeviceInfo(req).device} បានចូលគណនី (សាអេឡិចត្រូនិច : ${info_email})`,
+        description: `ប្រើប្រាស់ ${helper.extractDeviceInfo(req).browser} ចូលក្នុងប្រព័ន្ធ - ${helper.cambodiaDate()}`,
+        categoryTitle: "auth",
+        createdBy: user._id,
+        req,
       });
-      await session.save();
+
+      // 8. Create session
+      const access_token = prop.jwt.sign(
+        { userName: info_email, userId: user._id },
+        process.env.JWT_SECRET,
+        { expiresIn: "720h" },
+      );
+
+      const existingSession = await Session.findOne({
+        user_id: user._id,
+      });
+
+      if (existingSession) {
+        existingSession.time = helper.cambodiaDate();
+        existingSession.access_token = access_token;
+        existingSession.device = helper.extractDeviceInfo(req);
+        existingSession.user_data = user;
+        await existingSession.save();
+      } else {
+        const session = new Session({
+          user_id: user._id,
+          device: helper.extractDeviceInfo(req),
+          created_by: user._id,
+          time: helper.cambodiaDate(),
+          access_token: access_token,
+          user_data: user,
+        });
+        await session.save();
+      }
+
+      // 9. Return success with user data and token
+      user.access_token = access_token;
+
+      res.json({
+        success: true,
+        data: user,
+        log: {
+          device: helper.extractDeviceInfo(req),
+        },
+      });
+    } catch (error) {
+      console.error("❌ Login error:", error);
+      res.status(500).json({
+        success: false,
+        message: "មានបញ្ហាក្នុងប្រព័ន្ធ! សូមព្យាយាមម្តងទៀត",
+        error:
+          process.env.NODE_ENV === "development" ? error.message : undefined,
+      });
     }
-
-    // 6. Return success
-  
-   // delete userData.password;
-     user.access_token = access_token;
-     const newdata = user
-   //  user.user_data = newdata;
-
-    // 8. Send email notification (non-blocking)
-   // sendLoginNotification(user, info_email, req, transporter, emailTest);
-
-    res.json({
-      success: true,
-      data: user,
-      log: {
-        device: helper.extractDeviceInfo(req),
-      },
-    });
   });
-
   prop.app.post(
     `${urlAPI}/login-with-encryptpassword`,
     prop.api_auth,

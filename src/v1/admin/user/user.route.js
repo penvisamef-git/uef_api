@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const UserModel = require("../user/user.model");
+const ModelTeacher = require("../dashboard/student_mgt/teacher/model");
 const getFilteredMongoDB = require("../../../util/mongo_db/mongoDB_Queries");
 const baseRoute = "users";
 const { logActivity } = require("../../../util/log");
@@ -660,6 +661,88 @@ const route = (prop) => {
       }
     },
   );
+
+  prop.app.put(
+    `${urlAPI}/update-password-no-token/for-teacher/:id`,
+    prop.api_auth,
+    async (req, res) => {
+      try {
+        // ───────────────────────────────────────────────
+        // ✅ ID
+        const { id } = req.params;
+
+        const requiredFields = [{ key: "password", label: "ពាក្យសម្ងាត់" }];
+        checkValidtion(res, req, requiredFields);
+
+        // ───────────────────────────────────────────────
+        // ✅ Validate ID
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+          return res.status(400).json({
+            success: false,
+            message: noIDFound,
+          });
+        }
+
+        // ───────────────────────────────────────────────
+        // ✅ Hash the password
+        const hashedPassword = req.body.password;
+        
+        // ───────────────────────────────────────────────
+        // ✅ Build update fields
+        const updateFields = {
+          password: hashedPassword,
+        };
+
+        // ───────────────────────────────────────────────
+        // ✅ Remove empty fields (null or undefined)
+        Object.keys(updateFields).forEach(
+          (key) => (updateFields[key] == null || updateFields[key] === "") && delete updateFields[key],
+        );
+
+        // ───────────────────────────────────────────────
+        // ✅ Ensure there's at least one field to update
+        if (Object.keys(updateFields).length === 0) {
+          return res.status(400).json({
+            success: false,
+            message: "សូមបញ្ចូលពាក្យសម្ងាត់ថ្មី!",
+          });
+        }
+
+        // ───────────────────────────────────────────────
+        // ✅ Update teacher
+        const updatedData = await ModelTeacher.findByIdAndUpdate(
+          id,
+          updateFields,
+          {
+            new: true,
+            runValidators: true,
+          },
+        );
+
+        if (!updatedData) {
+          return res.status(404).json({
+            success: false,
+            message: noDataFound,
+          });
+        }
+
+        // ───────────────────────────────────────────────
+        // ✅ Response
+        res.status(200).json({
+          success: true,
+          data: updatedData,
+          message: `ពាក្យសម្ងាត់របស់ ${updatedData.info_firstname_kh || ''} ${updatedData.info_lastname_kh || ''} បានកែប្រែដោយជោគជ័យ!`,
+        });
+      } catch (err) {
+        console.error("❌ Error updating password:", err);
+        res.status(500).json({
+          success: false,
+          message: serverError,
+          error: err.message,
+        });
+      }
+    },
+);
 
   // ===================================== App ================================================
   prop.app.get(

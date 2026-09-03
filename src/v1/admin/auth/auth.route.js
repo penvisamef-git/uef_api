@@ -337,11 +337,6 @@ const route = (prop) => {
 
 
 
-
-
-
-
-
     prop.app.post(`${urlAPI}/login/app`, prop.api_auth, async (req, res) => {
     const { email, password } = req.body;
 

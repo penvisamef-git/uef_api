@@ -1,10 +1,11 @@
 const mongoose = require("mongoose");
 const Model = require("./model");
+const ModelClass = require("../../enrollment/class/model");
 const getFilteredMongoDB = require("../../../../../util/mongo_db/mongoDB_Queries");
 const baseRoute = "student-management/teacher";
 const { logActivity } = require("../../../../../util/log");
 const { checkValidtion } = require("../../../../../util/helper");
-
+const bcrypt = require("bcrypt");
 // ==========================================
 // Helper function to validate ObjectId
 // ==========================================
@@ -177,7 +178,6 @@ const route = (prop) => {
             value: info_id_card_number,
             label: "លេខអត្តសញ្ញាណប័ណ្ណ",
           },
-         
           {
             key: "info_phone_number",
             value: info_phone_number,
@@ -233,8 +233,6 @@ const route = (prop) => {
               field: `education[${i}].major_id`,
             });
           }
-
-        
         }
 
         // ==========================================
@@ -290,8 +288,6 @@ const route = (prop) => {
               field: `uef_experience[${i}].job_description`,
             });
           }
-
-      
         }
 
         // ==========================================
@@ -393,6 +389,13 @@ const route = (prop) => {
         }
 
         // ==========================================
+        // HASH PASSWORD
+        // ==========================================
+        const bcrypt = require("bcrypt");
+        const saltRounds = 10;
+        const hashedPassword = await bcrypt.hash(password.trim(), saltRounds);
+
+        // ==========================================
         // CREATE TEACHER
         // ==========================================
         const saveData = await Model.create({
@@ -447,8 +450,8 @@ const route = (prop) => {
           // UEF Experience (Array)
           uef_experience: uef_experience || [],
 
-          // Account
-          password: password.trim(),
+          // Account - Store hashed password
+          password: hashedPassword,
 
           // Other
           note: note ? note.trim() : "",
@@ -533,6 +536,83 @@ const route = (prop) => {
     },
   );
 
+  prop.app.put(
+    `${urlAPI}-update-password-no-token/for-teacher/:id`,
+    prop.api_auth,
+    prop.jwt_auth,
+    prop.request_user,
+    async (req, res) => {
+      try {
+        const { id } = req.params;
+
+        const requiredFields = [
+          { key: "password", label: "ពាក្យសម្ងាត់" },
+          { key: "info_email", label: "email" },
+        ];
+        checkValidtion(res, req, requiredFields);
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+          return res.status(400).json({
+            success: false,
+            message: noIDFound,
+          });
+        }
+
+        // check user
+        const teacherData = await Model.findOne({
+          _id: id,
+        });
+
+        if (!teacherData) {
+          return res.status(400).json({
+            success: false,
+            message: noIDFound,
+          });
+        }
+
+        if (teacherData.info_email !== req.body.info_email) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid Email",
+          });
+        }
+
+        // Hash the new password
+        const saltRounds = 10;
+        const hashedPassword = await bcrypt.hash(req.body.password, saltRounds);
+
+        const updatedData = await Model.findByIdAndUpdate(
+          id,
+          { password: hashedPassword },
+          {
+            new: true,
+            runValidators: true,
+          },
+        );
+
+        if (!updatedData) {
+          return res.status(404).json({
+            success: false,
+            message: noDataFound,
+          });
+        }
+
+        res.status(200).json({
+          success: true,
+          data: updatedData,
+          message: `ពាក្យសម្ងាត់របស់ ${updatedData.info_firstname_kh || ""} ${updatedData.info_lastname_kh || ""} បានកែប្រែដោយជោគជ័យ!`,
+        });
+      } catch (err) {
+        console.error("❌ Error updating password:", err);
+        res.status(500).json({
+          success: false,
+          message: serverError,
+          error: err.message,
+        });
+      }
+    },
+  );
+
   // ==========================================
   // GET BY ID - Get single teacher
   // ==========================================
@@ -562,18 +642,12 @@ const route = (prop) => {
           .populate("education.degree_level_id")
           .populate("education.major_id");
 
-
-
-
         if (!data) {
           return res.status(404).json({
             success: false,
             message: "មិនមានទិន្នន័យក្នុងប្រព័ន្ធ!",
           });
         }
-
-
-       
 
         // Remove password from response
         const sanitizedData = sanitizeTeacher(data);
@@ -1631,6 +1705,9 @@ const route = (prop) => {
       }
     },
   );
+
+  // ============================
+  // Get Class by Teacher
 };
 
 module.exports = route;

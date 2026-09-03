@@ -13,7 +13,7 @@ const userSchema = new mongoose.Schema(
     create_by: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      required: false,
     },
     user_data: Object,
   },

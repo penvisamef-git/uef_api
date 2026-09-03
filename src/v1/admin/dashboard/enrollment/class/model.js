@@ -145,6 +145,11 @@ const StudentSchema = new mongoose.Schema({
   },
   attendance: [AttendanceSchema],
   score: [ScoreSchema],
+  is_passed: {
+    type: Boolean,
+    required: false,
+    default: false
+  },
 });
 
 // ==========================================
@@ -236,19 +241,31 @@ const classSchema = new mongoose.Schema(
   },
   {
     timestamps: { createdAt: "created_date", updatedAt: "updated_date" },
-  }
+  },
 );
 
-classSchema.index({ code: 1 }, { unique: true });
+// ==========================================
+// Indexes - REMOVED DUPLICATES
+// ==========================================
+// Only define indexes here, not in the schema definition
+// The 'unique: true' in the schema definition is enough
 classSchema.index({ batch: 1, code: 1 });
 classSchema.index({ major_id: 1, year_study_id: 1 });
 classSchema.index({ "students.student_id": 1 });
 
-classSchema.methods.generateScoreDetail = function(scoreOption) {
+// ==========================================
+// Methods
+// ==========================================
+
+classSchema.methods.generateScoreDetail = function (scoreOption) {
   const scoreDetail = {};
-  if (scoreOption && scoreOption.score_options && Array.isArray(scoreOption.score_options)) {
-    scoreOption.score_options.forEach(option => {
-      const key = option.name.toLowerCase().replace(/\s+/g, '_');
+  if (
+    scoreOption &&
+    scoreOption.score_options &&
+    Array.isArray(scoreOption.score_options)
+  ) {
+    scoreOption.score_options.forEach((option) => {
+      const key = option.name.toLowerCase().replace(/\s+/g, "_");
       scoreDetail[key] = 0;
     });
   }
@@ -257,48 +274,53 @@ classSchema.methods.generateScoreDetail = function(scoreOption) {
   return scoreDetail;
 };
 
-classSchema.methods.initializeStudentScores = async function(studentId) {
+classSchema.methods.initializeStudentScores = async function (studentId) {
   const student = this.students.find(
-    s => s.student_id.toString() === studentId.toString()
+    (s) => s.student_id.toString() === studentId.toString(),
   );
   if (!student) {
-    throw new Error('មិនមានសិស្សនេះក្នុងថ្នាក់!');
+    throw new Error("មិនមានសិស្សនេះក្នុងថ្នាក់!");
   }
   student.score = [];
-  const ScoreOptionModel = mongoose.model('MasterDataScoreOption');
+  const ScoreOptionModel = mongoose.model("MasterDataScoreOption");
   for (const subjectSchedule of this.schedule) {
     let scoreDetail = { total: 0, grade: "" };
     if (subjectSchedule.score_option_id) {
-      const scoreOption = await ScoreOptionModel.findById(subjectSchedule.score_option_id);
+      const scoreOption = await ScoreOptionModel.findById(
+        subjectSchedule.score_option_id,
+      );
       if (scoreOption && scoreOption.score_options) {
-        scoreOption.score_options.forEach(option => {
-          const key = option.name.toLowerCase().replace(/\s+/g, '_');
+        scoreOption.score_options.forEach((option) => {
+          const key = option.name.toLowerCase().replace(/\s+/g, "_");
           scoreDetail[key] = 0;
         });
       }
     }
     student.score.push({
       subject_id: subjectSchedule.subject_id,
-      score_detail: scoreDetail
+      score_detail: scoreDetail,
     });
   }
   return student;
 };
 
-classSchema.methods.rebuildAllStudentScores = async function() {
-  const ScoreOptionModel = mongoose.model('MasterDataScoreOption');
+classSchema.methods.rebuildAllStudentScores = async function () {
+  const ScoreOptionModel = mongoose.model("MasterDataScoreOption");
   for (const student of this.students) {
     const newScores = [];
     for (const subjectSchedule of this.schedule) {
       let scoreDetail = { total: 0, grade: "" };
       const existingScore = student.score.find(
-        s => s.subject_id.toString() === subjectSchedule.subject_id.toString()
+        (s) =>
+          s.subject_id.toString() === subjectSchedule.subject_id.toString(),
       );
       if (subjectSchedule.score_option_id) {
-        const scoreOption = await ScoreOptionModel.findById(subjectSchedule.score_option_id);
+        const scoreOption = await ScoreOptionModel.findById(
+          subjectSchedule.score_option_id,
+        );
         if (scoreOption && scoreOption.score_options) {
-          scoreOption.score_options.forEach(option => {
-            const key = option.name.toLowerCase().replace(/\s+/g, '_');
+          scoreOption.score_options.forEach((option) => {
+            const key = option.name.toLowerCase().replace(/\s+/g, "_");
             const existingValue = existingScore?.score_detail?.[key];
             scoreDetail[key] = existingValue !== undefined ? existingValue : 0;
           });
@@ -310,7 +332,7 @@ classSchema.methods.rebuildAllStudentScores = async function() {
       }
       newScores.push({
         subject_id: subjectSchedule.subject_id,
-        score_detail: scoreDetail
+        score_detail: scoreDetail,
       });
     }
     student.score = newScores;
@@ -318,46 +340,16 @@ classSchema.methods.rebuildAllStudentScores = async function() {
   return this.students;
 };
 
-classSchema.pre('save', async function(next) {
-  try {
-    if (this.isModified('schedule')) {
-      const ScoreOptionModel = mongoose.model('MasterDataScoreOption');
-      for (const student of this.students) {
-        const newScores = [];
-        for (const subjectSchedule of this.schedule) {
-          let scoreDetail = { total: 0, grade: "" };
-          const existingScore = student.score.find(
-            s => s.subject_id.toString() === subjectSchedule.subject_id.toString()
-          );
-          if (subjectSchedule.score_option_id) {
-            const scoreOption = await ScoreOptionModel.findById(subjectSchedule.score_option_id);
-            if (scoreOption && scoreOption.score_options) {
-              scoreOption.score_options.forEach(option => {
-                const key = option.name.toLowerCase().replace(/\s+/g, '_');
-                const existingValue = existingScore?.score_detail?.[key];
-                scoreDetail[key] = existingValue !== undefined ? existingValue : 0;
-              });
-            }
-          }
-          if (existingScore) {
-            scoreDetail.total = existingScore.score_detail?.total || 0;
-            scoreDetail.grade = existingScore.score_detail?.grade || "";
-          }
-          newScores.push({
-            subject_id: subjectSchedule.subject_id,
-            score_detail: scoreDetail
-          });
-        }
-        student.score = newScores;
-      }
-    }
-    next();
-  } catch (error) {
-    next(error);
-  }
-});
+// ==========================================
+// REMOVED: Pre-save middleware - Causes errors
+// Handle score rebuilding manually in your service layer
+// ==========================================
+// classSchema.pre('save', function(next) {
+//   // This middleware was removed to fix the "next is not a function" error
+//   next();
+// });
 
-classSchema.set('toJSON', { virtuals: true });
-classSchema.set('toObject', { virtuals: true });
+classSchema.set("toJSON", { virtuals: true });
+classSchema.set("toObject", { virtuals: true });
 
 module.exports = mongoose.model("Class", classSchema);
