@@ -168,11 +168,13 @@ const route = (prop) => {
 
       // 6. Prepare user data (exclude sensitive fields)
       const user = {
-        info_email: userTeacher.info_email,
+        email: userTeacher.info_email,
         info_firstname_en: userTeacher.info_firstname_en,
-        info_lastname_en: userTeacher.info_lastname_en,
+        info_lastname_en: userTeacher.info_lastname_en + " (គ្រូបង្រៀន)",
         info_firstname_kh: userTeacher.info_firstname_kh,
         info_lastname_kh: userTeacher.info_lastname_kh,
+        firstname: userTeacher.info_firstname_kh,
+        lastname: userTeacher.info_lastname_kh,
         info_teacher_uef_id: userTeacher.info_teacher_uef_id,
         info_national_id: userTeacher.info_national_id,
         status: userTeacher.status,
